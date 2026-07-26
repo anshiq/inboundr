@@ -1,7 +1,8 @@
 import { useRef } from "react"
 import { motion, useReducedMotion, useScroll, useTransform } from "motion/react"
-import { ArrowUpRight } from "lucide-react"
-import { AuroraBackground } from "@/components/AuroraBackground"
+import { Link } from "react-router-dom"
+import { ArrowRight, ArrowUpRight } from "lucide-react"
+import LightRays from "@/components/LightRays"
 import { FadeIn } from "@/components/FadeIn"
 import { CtaSection } from "@/components/CtaSection"
 import { Faq } from "@/components/Faq"
@@ -109,10 +110,11 @@ export default function Home() {
     <>
       <title>Inboundr — Turn inbound into revenue</title>
       {/* ── Hero ── */}
-      <AuroraBackground className="noise overflow-hidden">
-        <div className="relative z-10 mx-auto max-w-4xl px-6 pb-32 pt-36 text-center sm:pb-44 sm:pt-48 lg:px-8">
+      <section className="noise relative isolate flex min-h-[88svh] flex-col justify-center overflow-hidden">
+        <LightRays />
+        <div className="relative z-10 mx-auto max-w-4xl px-6 pb-60 pt-24 text-center sm:pb-72 sm:pt-28 lg:px-8">
           <motion.p
-            className="label mb-8 text-green-bright"
+            className="mb-8 text-[13px] tracking-wide text-text-muted"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8 }}
@@ -127,7 +129,7 @@ export default function Home() {
               Turn inbound
             </HeroLine>
             <HeroLine
-              className="block font-display text-[clamp(3.5rem,10vw,8rem)] italic leading-[0.9] tracking-[-0.02em] text-gold"
+              className="block bg-gradient-to-r from-text via-green-bright to-gold bg-clip-text font-display text-[clamp(3.5rem,10vw,8rem)] italic leading-[0.9] tracking-[-0.02em] text-transparent"
               delay={0.27}
             >
               into revenue.
@@ -142,7 +144,7 @@ export default function Home() {
             AI that replies, quotes, follows up, and closes — automatically.
           </motion.p>
           <motion.div
-            className="mt-10 flex items-center justify-center gap-4"
+            className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-4"
             initial={{ opacity: 0, y: reduceMotion ? 0 : 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.55 }}
@@ -151,15 +153,22 @@ export default function Home() {
               href="https://calendly.com/tushgaurav/15min"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block bg-text px-7 py-3.5 text-sm font-semibold text-base transition-shadow duration-200 hover:shadow-[0_0_30px_rgba(62,207,142,0.15)]"
+              className="inline-block rounded-full bg-text px-7 py-3.5 text-sm font-semibold text-base transition-shadow duration-200 hover:shadow-[0_0_30px_rgba(62,207,142,0.25)]"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
             >
               Book a Demo
             </motion.a>
+            <Link
+              to="/features"
+              className="group inline-flex items-center gap-2 text-sm font-medium text-text transition-colors duration-200 hover:text-green-bright"
+            >
+              Learn More
+              <ArrowRight className="size-4 transition-transform duration-200 ease-out group-hover:translate-x-1" />
+            </Link>
           </motion.div>
         </div>
-      </AuroraBackground>
+      </section>
 
       {/* ── Feature strip ── */}
       <section id="features" className="border-y border-border">
