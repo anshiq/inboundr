@@ -18,19 +18,31 @@ const fragmentShader = /* glsl */ `
   uniform float uTime;
   uniform float uAspect;
 
-  const int RAY_COUNT = 18;
+  const int RAY_COUNT = 22;
 
   const vec3 BASE = vec3(0.024, 0.035, 0.024);
+  const vec3 LIME = vec3(0.72, 0.93, 0.34);
   const vec3 GREEN = vec3(0.243, 0.812, 0.557);
+  const vec3 AQUA = vec3(0.42, 0.90, 0.86);
+  const vec3 BLUE = vec3(0.62, 0.83, 1.00);
   const vec3 GOLD = vec3(0.937, 0.773, 0.329);
   const vec3 CORE = vec3(0.878, 0.968, 0.898);
 
-  // Fan spans this angular slice, measured from the off-screen origin.
-  const float ANG_MIN = -1.30;
-  const float ANG_SPAN = 1.18;
+  // Fan spans this angular slice, measured from the off-screen origin. The
+  // window is aimed so the full palette lands on screen rather than below it.
+  const float ANG_MIN = -0.81;
+  const float ANG_SPAN = 0.90;
 
   float hash11(float n) {
     return fract(sin(n * 127.1) * 43758.5453123);
+  }
+
+  // Hue ramps left to right across the viewport: warm lime, through the brand
+  // green, into cool aqua and blue. Each ray therefore cools along its length.
+  vec3 fanPalette(float t) {
+    vec3 c = mix(LIME, GREEN, smoothstep(0.0, 0.38, t));
+    c = mix(c, AQUA, smoothstep(0.34, 0.72, t));
+    return mix(c, BLUE, smoothstep(0.70, 1.0, t));
   }
 
   void main() {
@@ -38,14 +50,21 @@ const fragmentShader = /* glsl */ `
     float narrow = 1.0 - smoothstep(0.6, 1.1, uAspect);
 
     vec2 p = vec2(vUv.x * uAspect, vUv.y);
-    vec2 origin = vec2(mix(-0.45, -0.70, narrow) * uAspect, mix(0.95, 0.46, narrow));
+    vec2 origin = vec2(mix(-0.45, -0.70, narrow) * uAspect, mix(0.80, 0.46, narrow));
     vec2 d = p - origin;
     float r = length(d);
 
-    float ang = atan(d.y, d.x) + 0.06 * sin(r * 0.9);
+    // Rays leave the origin steep and flatten as they travel, so each one bows.
+    float ang = atan(d.y, d.x) + 0.26 * (1.0 - exp(-r * 0.85));
     float fanT = (ang - ANG_MIN) / ANG_SPAN;
 
-    float atten = smoothstep(0.15, 0.75, r) * exp(-max(r - 1.7, 0.0) * 0.55);
+    float atten = smoothstep(0.15, 0.75, r) * exp(-max(r - 2.1, 0.0) * 0.5);
+    // Streaks gather intensity along their length, hottest at the far ends.
+    float reach = mix(0.55, 1.45, smoothstep(0.35, 1.9, r));
+    // ...and only the cool right-hand ends bleach out to white.
+    float hot = smoothstep(0.8, 2.2, r) * smoothstep(0.40, 1.0, vUv.x);
+
+    vec3 tint = mix(fanPalette(clamp(vUv.x * 1.05, 0.0, 1.0)), vec3(1.0), hot * 0.6);
 
     vec3 col = vec3(0.0);
 
@@ -56,32 +75,39 @@ const fragmentShader = /* glsl */ `
       float s3 = hash11(fi + 27.7);
 
       float pos = (fi + 0.5) / float(RAY_COUNT)
-        + (s1 - 0.5) * 0.055
+        + (s1 - 0.5) * 0.050
         + 0.010 * sin(uTime * (0.10 + 0.09 * s2) + s1 * 6.283);
 
       float width = mix(0.0012, 0.009, s2 * s2);
-      float q = min(abs(fanT - pos) / width, 12.0);
+      float q = min(abs(fanT - pos) / width, 16.0);
 
       float core = exp(-q * q);
-      float bloom = exp(-q * q / 7.0) * 0.35;
-      float halo = exp(-q * q / 34.0) * 0.07;
+      float bloom = exp(-q * q / 8.0) * 0.30;
+      float halo = exp(-q * q / 45.0) * 0.10;
+      float wash = exp(-q * q / 240.0) * 0.045;
 
-      float bright = mix(0.10, 1.6, s3) * (0.80 + 0.20 * sin(uTime * 0.25 + s2 * 6.283));
-      vec3 tint = mix(GREEN, GOLD, s1 * 0.7);
+      float bright = mix(0.10, 1.25, s3) * (0.80 + 0.20 * sin(uTime * 0.25 + s2 * 6.283)) * reach;
 
-      col += (core * (CORE * 1.15 + tint * 0.5) + (bloom + halo) * tint) * bright;
+      col += (core * (CORE * 0.55 + tint * 1.0) + (bloom + halo + wash) * tint * 1.15) * bright;
     }
 
     col *= atten;
+
+    // Push the hue ramp back after all the overlapping glow washes it out.
+    col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 1.3);
 
     col += GREEN * 0.035 * exp(-length(p - vec2(0.18 * uAspect, -0.05)) * 2.2);
     col += GOLD * 0.018 * exp(-length(p - vec2(0.85 * uAspect, 0.02)) * 2.6);
 
     // Keep the copy area near-black so the headline and CTAs stay legible.
-    float maskStart = mix(0.24, 0.08, narrow);
-    float maskEnd = mix(0.76, 0.40, narrow);
+    float maskStart = mix(0.18, 0.08, narrow);
+    float maskEnd = mix(0.62, 0.40, narrow);
     col *= mix(0.03, 1.0, 1.0 - smoothstep(maskStart, maskEnd, vUv.y));
-    col *= 1.0 - smoothstep(0.55, 1.0, vUv.x) * mix(0.7, 0.3, narrow);
+
+    // Soft scrim under the copy block, since the streaks now run much hotter.
+    vec2 scrim = (vUv - vec2(0.5, mix(0.56, 0.62, narrow)))
+      / vec2(mix(0.62, 0.80, narrow), mix(0.27, 0.30, narrow));
+    col *= 1.0 - 0.85 * exp(-dot(scrim, scrim) * 1.6);
 
     float dither = (hash11(vUv.x * 371.0 + vUv.y * 913.0) - 0.5) * 0.008;
 
