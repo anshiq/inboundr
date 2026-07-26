@@ -77,23 +77,6 @@
   }
 }
 
-@keyframes aurora {
-  from {
-    background-position: 50% 50%, 50% 50%;
-  }
-  to {
-    background-position: 350% 50%, 350% 50%;
-  }
-}
-
-@utility animate-aurora {
-  animation: aurora 60s linear infinite;
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
-  }
-}
-
 @utility label {
   font-size: 13px;
   font-weight: 500;
