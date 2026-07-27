@@ -3,9 +3,12 @@ import type { Request, Response } from "express";
 import type { DatabaseConfig, Product } from "../types";
 import type { OrganizationRequest } from "../middleware/auth.middleware";
 import {
+  EDITABLE_PRODUCT_COLUMNS,
+  PRODUCT_COLUMNS,
   searchProductRecords,
   serializeProductRecord,
 } from "../services/product.service";
+import { encodeProductValues } from "../db/product-columns";
 import {
   adjustmentsFromDefinitions,
   getOrCreateProductSettings,
@@ -39,51 +42,7 @@ type ProductImportResult = {
   skipped: Array<{ row: number; productcode: string; reason: string }>;
 };
 
-const PRODUCT_COLUMNS = [
-  "id::text AS id",
-  "organization_id",
-  "brand",
-  "maxdiscount",
-  "productdescription",
-  "productcode",
-  "unitprice",
-  "hsncode",
-  "gstrate",
-  "productlink",
-  "maxupsell",
-  "calibrationcharges",
-  "unit",
-  "is_top_seller",
-  "category",
-  "tags",
-  "attributes",
-  "default_adjustments",
-  "pricing_policy",
-  "addedtime",
-  "addeduser",
-] as const;
-
-const EDITABLE_COLUMNS = [
-  "brand",
-  "maxdiscount",
-  "productdescription",
-  "productcode",
-  "unitprice",
-  "hsncode",
-  "gstrate",
-  "productlink",
-  "maxupsell",
-  "calibrationcharges",
-  "unit",
-  "is_top_seller",
-  "category",
-  "tags",
-  "attributes",
-  "default_adjustments",
-  "pricing_policy",
-  "addedtime",
-  "addeduser",
-] as const;
+const EDITABLE_COLUMNS = EDITABLE_PRODUCT_COLUMNS;
 
 const SEARCH_COLUMNS = [
   "brand",
@@ -382,8 +341,11 @@ export const createProduct = async (
     }
 
     const columns = ["organization_id", ...EDITABLE_COLUMNS.filter((column) => column in input)];
-    const values = columns.map((column) =>
+    const values = encodeProductValues(
+      columns,
+      columns.map((column) =>
         column === "organization_id" ? organizationId : input[column as keyof ProductInput]
+      )
     );
     const placeholders = columns.map((_, index) => `$${index + 1}`);
 
@@ -488,7 +450,10 @@ export const importProducts = async (
 
         if (existing.rows[0] && mode === "update") {
           const columns = EDITABLE_COLUMNS.filter((column) => column in input);
-          const values = columns.map((column) => input[column]);
+          const values = encodeProductValues(
+            columns,
+            columns.map((column) => input[column])
+          );
           const assignments = columns.map((column, assignmentIndex) => {
             const placeholder = `$${assignmentIndex + 1}`;
             if (column === "attributes" || column === "pricing_policy") {
@@ -513,8 +478,11 @@ export const importProducts = async (
           input.default_adjustments = adjustmentsFromDefinitions(settings.adjustmentDefinitions) as ProductInput["default_adjustments"];
         }
         const columns = ["organization_id", ...EDITABLE_COLUMNS.filter((column) => column in input)];
-        const values = columns.map((column) =>
+        const values = encodeProductValues(
+          columns,
+          columns.map((column) =>
             column === "organization_id" ? organizationId : input[column as keyof ProductInput]
+          )
         );
         const placeholders = columns.map((_, placeholderIndex) => `$${placeholderIndex + 1}`);
 
@@ -571,7 +539,10 @@ export const updateProduct = async (
       return;
     }
 
-    const values = columns.map((column) => input[column]);
+    const values = encodeProductValues(
+      columns,
+      columns.map((column) => input[column])
+    );
     const assignments = columns.map((column, index) => `${column} = $${index + 1}`);
     values.push(id, organizationId);
 
@@ -584,7 +555,10 @@ export const updateProduct = async (
     );
 
     if (!result.rows[0] && input.productcode) {
-      const fallbackValues = columns.map((column) => input[column]);
+      const fallbackValues = encodeProductValues(
+        columns,
+        columns.map((column) => input[column])
+      );
       fallbackValues.push(input.productcode, organizationId);
       result = await pool.query<Product>(
         `UPDATE products
