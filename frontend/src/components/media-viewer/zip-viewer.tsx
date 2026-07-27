@@ -177,7 +177,7 @@ export default function ZipViewer({ url, name }: ZipViewerProps) {
             className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to archive
+            Back to Archive
           </button>
           <span className="truncate text-sm font-medium text-foreground/90 max-w-xs" title={previewEntry.path}>
             {previewEntry.path}
@@ -200,7 +200,7 @@ export default function ZipViewer({ url, name }: ZipViewerProps) {
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
                 <AlertTriangle className="h-8 w-8 text-muted-foreground/50" />
-                <p className="text-sm font-medium text-foreground">No preview available for this file type</p>
+                <p className="text-sm font-medium text-foreground">No Preview Available for This File Type</p>
                 <button
                   type="button"
                   onClick={() => handleDownloadEntry(previewEntry)}
