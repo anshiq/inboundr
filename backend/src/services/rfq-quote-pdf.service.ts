@@ -116,7 +116,12 @@ function drawQuoteItems(
     const adjustmentText = (product.adjustments ?? []).map(
       (adjustment) => `${adjustment.label} ${money(adjustment.amount ?? 0, currency)}`
     ).join(" · ");
-    const meta = [product.brand, product.code, taxCode ? `${product.tax?.label ?? "Tax"} ${taxCode}` : null]
+    const meta = [
+      product.brand,
+      product.code,
+      taxCode ? `${product.tax?.label ?? "Tax"} ${taxCode}` : null,
+      product.deliveryTimeline ? `Delivery ${product.deliveryTimeline}` : null,
+    ]
       .filter(Boolean)
       .join(" · ");
     const pricingMeta = hasDiscount

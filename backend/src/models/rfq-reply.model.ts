@@ -16,6 +16,7 @@ export interface IRFQReplyProduct {
   tax: IRFQTax;
   attributes: Record<string, string | number | boolean | null>;
   adjustments: IRFQAdjustment[];
+  deliveryTimeline: string | null;
 }
 
 export interface IRFQReply extends Document {
@@ -66,6 +67,7 @@ const rfqReplyProductSchema = new Schema<IRFQReplyProduct>(
       type: [rfqAdjustmentSchema],
       default: [],
     },
+    deliveryTimeline: { type: String, default: null },
   },
   { _id: false }
 );
