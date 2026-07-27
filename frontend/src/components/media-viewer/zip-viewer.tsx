@@ -328,7 +328,7 @@ export default function ZipViewer({ url, name }: ZipViewerProps) {
               <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-2">
                 <FileCode className="h-8 w-8 text-muted-foreground/40" />
                 <div>
-                  <p className="font-semibold text-sm">No files matched your search</p>
+                  <p className="font-semibold text-sm">No Files Matched Your Search</p>
                   <p className="text-xs text-muted-foreground/80">Try adjusting your filter or query</p>
                 </div>
               </div>
