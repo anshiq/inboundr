@@ -46,10 +46,10 @@ Hard rules:
 - Body structure:
   1) Greeting referencing the customer.
   2) One short line thanking them for the enquiry and confirming the quote below.
-  3) An itemised list. For each item include its description, manufacturer, code, tax information, quantity, unit price, adjustments, and line total when supplied.
+  3) An itemised list. For each item include its description, manufacturer, code, tax information, quantity, unit price, adjustments, delivery, and line total when supplied.
   4) Pricing summary: subtotal, discount (only if non-zero), tax total, grand total. Use the exact values from the "Pricing summary" block.
   5) Payment terms — use the quote payment terms verbatim.
-  6) Delivery terms — use the quote delivery terms verbatim.
+  6) Delivery terms — use the quote delivery terms verbatim. When an item carries its own Delivery value it overrides the quote delivery terms for that item, so keep it on the item and do not restate it here.
   7) A short closing line inviting questions.
   8) Sign-off using the organization's contact name, organization name, email and phone when provided. Do not invent contact details.
 
@@ -100,6 +100,7 @@ export interface QuoteInput {
       amount?: number;
       taxable: boolean;
     }>;
+    deliveryTimeline?: string | null;
   }[];
 }
 
@@ -116,6 +117,7 @@ interface PricedLine {
   gstRateText: string;
   taxLabel: string;
   adjustmentsText: string | null;
+  deliveryTimelineText: string | null;
   lineTotalText: string;
   hasPrice: boolean;
 }
@@ -241,6 +243,7 @@ function computePricing(input: QuoteInput): PricingSummary {
       adjustmentsText: (p.adjustments ?? []).length > 0
         ? (p.adjustments ?? []).map((item) => `${item.label}: ${formatMoney(adjustmentAmount(item, quantity, p.price ?? 0), currency)}`).join(", ")
         : null,
+      deliveryTimelineText: p.deliveryTimeline?.trim() || null,
       lineTotalText: hasPrice ? formatMoney(lineTotal, currency) : "Price on request",
       hasPrice,
     };
@@ -277,7 +280,7 @@ function renderProductLines(pricing: PricingSummary): string {
    Tax Code: ${l.hsnCode}
    Quantity: ${l.quantity}
    Unit Price: ${l.unitPriceText}${discountLines}
-   ${l.taxLabel} Rate: ${l.gstRateText}${l.adjustmentsText ? `\n   Adjustments: ${l.adjustmentsText}` : ""}
+   ${l.taxLabel} Rate: ${l.gstRateText}${l.adjustmentsText ? `\n   Adjustments: ${l.adjustmentsText}` : ""}${l.deliveryTimelineText ? `\n   Delivery: ${l.deliveryTimelineText}` : ""}
    Line Total: ${l.lineTotalText}`;
     })
     .join("\n\n");
