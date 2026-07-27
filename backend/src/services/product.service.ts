@@ -4,6 +4,7 @@ import { Types } from "mongoose";
 import type { DatabaseConfig, Product } from "../types";
 import type { CatalogProduct } from "../catalog/catalog.types";
 import { mapProductRow, withLegacyProductAliases } from "../catalog/product.mapper";
+import { encodeProductValues } from "../db/product-columns";
 import {
   adjustmentsFromDefinitions,
   getOrCreateProductSettings,
@@ -170,8 +171,11 @@ export async function createProductRecord(
     "organization_id",
     ...EDITABLE_PRODUCT_COLUMNS.filter((column) => column in input),
   ];
-  const values = columns.map((column) =>
+  const values = encodeProductValues(
+    columns,
+    columns.map((column) =>
       column === "organization_id" ? organizationId : input[column as keyof ProductInput]
+    )
   );
   const placeholders = columns.map((_, index) => `$${index + 1}`);
 
