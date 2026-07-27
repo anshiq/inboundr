@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/sheet"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ContactHoverCard, SenderHoverCard } from "@/components/contact-hover-card"
+import { DeliveryTermCombobox } from "@/components/delivery-term-combobox"
 import { CopyableText } from "@/components/copy-button"
 import { openDownload } from "@/lib/downloads"
 import { StatusBadge, type StatusTone } from "@/components/status-badge"
@@ -1996,11 +1997,10 @@ export function DashboardPage() {
               />
             </div>
             <label className="ml-1 w-14 shrink-0 text-[10px] text-muted-foreground">Delivery</label>
-            <Input
+            <DeliveryTermCombobox
               value={product.deliveryTimeline}
-              onChange={(event) => handleManualProductChange(product.id, "deliveryTimeline", event.target.value)}
-              placeholder="e.g. 2 weeks"
-              className="h-7 border-muted-foreground/15 bg-transparent text-xs"
+              onChange={(next) => handleManualProductChange(product.id, "deliveryTimeline", next)}
+              templates={deliveryTermTemplates}
             />
           </div>
         </div>
@@ -3061,11 +3061,10 @@ export function DashboardPage() {
                                               />
                                             </div>
                                             <label className="ml-1 w-14 shrink-0 text-[10px] text-muted-foreground">Delivery</label>
-                                            <Input
+                                            <DeliveryTermCombobox
                                               value={override?.deliveryTimeline ?? ""}
-                                              onChange={(e) => handleOverrideChange(overrideKey, "deliveryTimeline", e.target.value)}
-                                              placeholder="e.g. 2 weeks"
-                                              className="h-7 border-muted-foreground/15 bg-transparent text-xs"
+                                              onChange={(next) => handleOverrideChange(overrideKey, "deliveryTimeline", next)}
+                                              templates={deliveryTermTemplates}
                                             />
                                           </div>
                                         </div>
