@@ -62,7 +62,7 @@ export function DeliveryTermCombobox({
           title={hasValue ? value : undefined}
           data-empty={!hasValue}
           className={cn(
-            "h-7 min-w-0 flex-1 justify-between gap-1 border-muted-foreground/15 bg-transparent px-2 text-xs font-normal data-[empty=true]:text-muted-foreground",
+            "h-7 min-w-0 flex-1 shrink justify-between gap-1 border-muted-foreground/15 bg-transparent px-2 text-xs font-normal data-[empty=true]:text-muted-foreground",
             className
           )}
         >

@@ -978,6 +978,7 @@ export const generateQuote = async (
           p.calibrationCharges
         ),
         discountPercent: p.discountPercent ?? 0,
+        deliveryTimeline: p.deliveryTimeline,
       })),
     });
 
