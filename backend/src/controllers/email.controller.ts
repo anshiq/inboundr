@@ -5,6 +5,7 @@ import { GmailAccount } from "../models/gmail-account.model";
 import { RFQ } from "../models/rfq.model";
 import type { AuthenticatedRequest, OrganizationRequest } from "../middleware/auth.middleware";
 import { streamEmailPdf } from "../services/email-pdf.service";
+import { resolveOrganizationPdfBranding } from "../services/organization-pdf-branding.service";
 import { buildRFQProcessingInput, hasRFQProcessableContent } from "../services/rfq-input.service";
 import { processEmailForRFQ } from "../services/rfq.service";
 
@@ -286,19 +287,8 @@ export const downloadEmailPdf = async (
       .select("isRFQ reason errorMessage")
       .lean();
 
-    streamEmailPdf(
-      email,
-      {
-        name: organization.name,
-        email: organization.defaultContact?.email,
-        phoneNumber: organization.defaultContact?.phoneNumber,
-        address: organization.address,
-        website: organization.website,
-        primaryColor: organization.preferences?.primaryColor,
-      },
-      rfq,
-      res
-    );
+    const branding = await resolveOrganizationPdfBranding(organization);
+    await streamEmailPdf(email, branding, rfq, res);
   } catch (err) {
     console.error("Error rendering email PDF:", err);
     res.status(500).json({ error: "Failed to render email PDF" });

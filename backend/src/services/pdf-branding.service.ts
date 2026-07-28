@@ -52,6 +52,15 @@ export function normalizePdfColor(value: string | null | undefined, fallback = P
   return /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
 }
 
+export type PdfImageSource = { data: Buffer; format: "png" | "jpg" };
+
+/** Sniff PNG vs JPEG so react-pdf can embed a raw image buffer. */
+export function pdfImageSource(buffer: Buffer | null | undefined): PdfImageSource | null {
+  if (!buffer || buffer.length < 4) return null;
+  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
+  return { data: buffer, format: isJpeg ? "jpg" : "png" };
+}
+
 export function createBrandedPdfDocument(options: {
   title: string;
   subject: string;

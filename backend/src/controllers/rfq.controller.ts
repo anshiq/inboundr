@@ -166,17 +166,34 @@ function quoteAdjustments(
     }];
   });
   const calibration = nullableNumber(legacyCalibration);
-  if (normalized.length === 0 && calibration != null && calibration > 0) {
-    normalized.push({
-      id: "legacy.calibration",
-      code: "calibration",
-      label: "Calibration",
-      type: "fixed",
-      value: calibration,
-      amount: calibration * quantity,
-      taxable: false,
-    });
+  if (calibration == null || calibration < 0) return normalized;
+
+  // The quote builder exposes calibration as its own field, so an edited value
+  // has to win over the adjustment the catalog seeded onto the product.
+  const existing = normalized.findIndex((item) => item.code === "calibration");
+  if (existing === -1) {
+    if (calibration > 0) {
+      normalized.push({
+        id: "legacy.calibration",
+        code: "calibration",
+        label: "Calibration",
+        type: "fixed",
+        value: calibration,
+        amount: calibration * quantity,
+        taxable: false,
+      });
+    }
+    return normalized;
   }
+
+  const current = normalized[existing]!;
+  normalized[existing] = {
+    ...current,
+    value: calibration,
+    amount: current.type === "percentage"
+      ? (unitPrice ?? 0) * quantity * calibration / 100
+      : calibration * quantity,
+  };
   return normalized;
 }
 
