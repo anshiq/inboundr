@@ -59,14 +59,7 @@ export function resolveBranding(
   };
 }
 
-type ImageSource = { data: Buffer; format: "png" | "jpg" };
-
-/** Sniff PNG vs JPEG so react-pdf can embed a raw image buffer. */
-export function imageSource(buffer: Buffer | null | undefined): ImageSource | null {
-  if (!buffer || buffer.length < 4) return null;
-  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
-  return { data: buffer, format: isJpeg ? "jpg" : "png" };
-}
+export { pdfImageSource as imageSource } from "../pdf-branding.service";
 
 export function orgContactLines(branding: PdfOrganizationBranding): string[] {
   return [branding.address, branding.email, branding.phoneNumber, branding.website]

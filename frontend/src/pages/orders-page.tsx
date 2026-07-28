@@ -455,7 +455,7 @@ export function OrdersPage() {
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-medium">{product.queryName}</p>
+                            <p className="text-sm font-semibold">{product.queryName}</p>
                             {product.searchResultIndex != null && (
                               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
                                 Item {product.searchResultIndex + 1}
@@ -470,13 +470,13 @@ export function OrdersPage() {
                               Qty: {product.quantity}
                             </span>
                           </div>
-                          <p className="mt-1 text-sm text-muted-foreground">
+                          <p className="mt-1 text-[13px] text-muted-foreground">
                             {product.lineStatus === "regretted"
                               ? product.regretReason || "Not available in catalog"
                               : product.description || "No description"}
                           </p>
                           {product.lineStatus !== "regretted" && (
-                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-foreground/70">
+                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-foreground/70">
                             {product.brand && <span>{product.brand}</span>}
                             {product.brand && product.code && <span>·</span>}
                             {product.code && <span className="font-mono">{product.code}</span>}
