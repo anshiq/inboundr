@@ -526,13 +526,14 @@ export function RichTextEditor({
   // Only push external values in when they actually diverge, otherwise every
   // keystroke would reset the selection.
   useEffect(() => {
-    if (!editor) return
+    if (!editor || editor.isDestroyed) return
     if (value === editor.getHTML()) return
     editor.commands.setContent(value, { emitUpdate: false })
   }, [editor, value])
 
   useEffect(() => {
-    editor?.setEditable(!disabled)
+    if (!editor || editor.isDestroyed) return
+    editor.setEditable(!disabled)
   }, [editor, disabled])
 
   useEffect(() => {
