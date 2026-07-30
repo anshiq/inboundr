@@ -297,12 +297,39 @@ export async function sendStandaloneEmail({
   });
 }
 
-function buildReferences(email: IEmail): string | undefined {
-  const values = [email.references, email.inReplyTo, email.rfcMessageId]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  return values || undefined;
+function splitMessageIds(value: string | null | undefined): string[] {
+  return (value ?? "").trim().split(/\s+/).filter(Boolean);
+}
+
+/**
+ * RFC 5322 section 3.6.4: a reply's References is the parent's References
+ * followed by the parent's Message-ID.
+ *
+ * The parent's In-Reply-To is normally already the final entry of its References,
+ * so appending both would repeat an id. It is only useful as the starting point
+ * when the parent carried no References at all, which happens with clients that
+ * set In-Reply-To alone; dropping it in that case would lose the link to the
+ * grandparent and break the chain.
+ */
+export function buildReferences(
+  email: Pick<IEmail, "references" | "inReplyTo" | "rfcMessageId">
+): string | undefined {
+  const inherited = email.references?.trim()
+    ? splitMessageIds(email.references)
+    : splitMessageIds(email.inReplyTo);
+
+  const ids = [...inherited, ...splitMessageIds(email.rfcMessageId)];
+
+  // A malformed inbound chain can still repeat an id, so keep the first
+  // occurrence of each and preserve conversation order.
+  const seen = new Set<string>();
+  const deduped = ids.filter((id) => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  return deduped.length > 0 ? deduped.join(" ") : undefined;
 }
 
 export async function sendQuoteOnGmailThread({
