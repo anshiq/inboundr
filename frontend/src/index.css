@@ -328,3 +328,15 @@
   border: 0;
   border-top: 1px solid var(--border);
 }
+
+.email-editor-content img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 0 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.email-editor-content img.ProseMirror-selectednode {
+  outline: 2px solid var(--primary);
+}

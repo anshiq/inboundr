@@ -751,6 +751,7 @@ export function EmailsPage() {
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([])
   const [threadDrafts, setThreadDrafts] = useState<ThreadMessage[]>([])
   const [threadLoading, setThreadLoading] = useState(false)
+  const [threadError, setThreadError] = useState<string | null>(null)
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null)
   const [creatingDraft, setCreatingDraft] = useState(false)
   const [signaturesByAccount, setSignaturesByAccount] = useState<Record<string, string | null>>({})
@@ -824,6 +825,7 @@ export function EmailsPage() {
 
   const loadThread = useCallback(async (id: string) => {
     setThreadLoading(true)
+    setThreadError(null)
     try {
       const initial = await fetchThread(id)
       setThreadMessages(initial.messages)
@@ -838,11 +840,17 @@ export function EmailsPage() {
         setThreadDrafts(synced.drafts)
       } catch (err) {
         console.error("Thread sync failed:", err)
+        toast.error(
+          err instanceof Error
+            ? `Could not check Gmail for newer messages: ${err.message}`
+            : "Could not check Gmail for newer messages"
+        )
       }
-    } catch {
+    } catch (err) {
       setThreadMessages([])
       setThreadDrafts([])
       setThreadLoading(false)
+      setThreadError(err instanceof Error ? err.message : "Failed to load the conversation")
     }
   }, [])
 
@@ -897,6 +905,7 @@ export function EmailsPage() {
     setActiveDraftId(null)
     setThreadMessages([])
     setThreadDrafts([])
+    setThreadError(null)
     if (selectedId) void loadThread(selectedId)
   }, [selectedId, loadThread])
 
@@ -949,19 +958,27 @@ export function EmailsPage() {
     [threadDrafts, activeDraftId]
   )
 
-  // The message a reply is anchored to: the newest in the thread, falling back
-  // to the selected email when the thread has not loaded yet.
+  // A reply anchors to the newest message in the thread, matching Gmail, and
+  // falls back to the selected email until the thread has loaded. Anchoring on
+  // one of our own sent messages is safe: the server derives recipients from who
+  // that message was addressed to rather than from its sender.
   const composeParent = useMemo<ThreadMessage | null>(() => {
-    if (threadMessages.length > 0) {
-      const inbound = [...threadMessages].reverse().find((m) => m.direction === "inbound")
-      return inbound ?? threadMessages[threadMessages.length - 1]
-    }
+    if (threadMessages.length > 0) return threadMessages[threadMessages.length - 1]
     return detail ? (detail as unknown as ThreadMessage) : null
   }, [threadMessages, detail])
 
+  // The detail fallback is not serialized through the thread endpoint, so it
+  // carries no canReplyAll; offering the control is better than hiding it before
+  // the thread arrives.
+  const canReplyAll = composeParent?.canReplyAll ?? true
+
   const startCompose = useCallback(
-    async (kind: ReplyKind) => {
+    async (requested: ReplyKind) => {
       if (!composeParent || creatingDraft) return
+
+      // With nobody extra to copy, reply-all is just a reply. The shortcut stays
+      // useful rather than doing nothing while its button is hidden.
+      const kind = requested === "reply_all" && !canReplyAll ? "reply" : requested
 
       // Reuse an open draft of the same kind rather than stacking duplicates.
       const existing = threadDrafts.find((draft) => draft.kind === kind)
@@ -981,7 +998,7 @@ export function EmailsPage() {
         setCreatingDraft(false)
       }
     },
-    [composeParent, creatingDraft, threadDrafts]
+    [composeParent, creatingDraft, threadDrafts, canReplyAll]
   )
 
   const handleDraftSaved = useCallback((saved: ThreadMessage) => {
@@ -1021,15 +1038,6 @@ export function EmailsPage() {
         return
       }
 
-      if (e.key === "j" || e.key === "k") {
-        e.preventDefault()
-        const currentIndex = emails.findIndex((em) => em._id === selectedId)
-        const next = e.key === "j" ? currentIndex + 1 : currentIndex - 1
-        if (next >= 0 && next < emails.length) {
-          selectEmail(emails[next]._id)
-        }
-      }
-
       if (e.key === "Escape") {
         if (selectedAttachment) {
           setSelectedAttachment(null)
@@ -1037,6 +1045,19 @@ export function EmailsPage() {
           setActiveDraftId(null)
         } else if (detail) {
           selectEmail(null)
+        }
+        return
+      }
+
+      // Everything below acts on the thread, which is behind an open overlay.
+      if (activeDraftId || selectedAttachment) return
+
+      if (e.key === "j" || e.key === "k") {
+        e.preventDefault()
+        const currentIndex = emails.findIndex((em) => em._id === selectedId)
+        const next = e.key === "j" ? currentIndex + 1 : currentIndex - 1
+        if (next >= 0 && next < emails.length) {
+          selectEmail(emails[next]._id)
         }
       }
 
@@ -1254,20 +1275,22 @@ export function EmailsPage() {
                         </TooltipTrigger>
                         <TooltipContent>Reply (R)</TooltipContent>
                       </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 text-muted-foreground/50 hover:text-foreground"
-                            onClick={() => void startCompose("reply_all")}
-                            disabled={creatingDraft}
-                          >
-                            <ReplyAllIcon className="size-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Reply All (A)</TooltipContent>
-                      </Tooltip>
+                      {canReplyAll && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground/50 hover:text-foreground"
+                              onClick={() => void startCompose("reply_all")}
+                              disabled={creatingDraft}
+                            >
+                              <ReplyAllIcon className="size-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Reply All (A)</TooltipContent>
+                        </Tooltip>
+                      )}
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -1453,6 +1476,23 @@ export function EmailsPage() {
                         <Skeleton key={i} className="h-14 w-full rounded-xl" />
                       ))}
                     </div>
+                  ) : threadError ? (
+                    <div className="mx-8 my-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+                      <p className="text-[13px] font-medium text-destructive">
+                        This conversation could not be loaded
+                      </p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                        {threadError}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3"
+                        onClick={() => selectedId && void loadThread(selectedId)}
+                      >
+                        Retry
+                      </Button>
+                    </div>
                   ) : (
                     <ThreadStack
                       messages={threadMessages}
@@ -1470,28 +1510,31 @@ export function EmailsPage() {
                   )}
                 </div>
 
-                {activeDraft && composeParent ? (
+                {activeDraft && composeParent && (
                   <ReplyComposer
                     key={activeDraft._id}
                     draft={activeDraft}
                     parent={composeParent}
+                    fromAddress={detail.gmailAccountEmail ?? null}
                     signatureHtml={parentSignature}
                     onSent={handleDraftSent}
                     onDiscarded={handleDraftDiscarded}
                     onDraftSaved={handleDraftSaved}
                     onClose={() => setActiveDraftId(null)}
                   />
-                ) : (
-                  <div className="flex shrink-0 items-center gap-2 border-t border-border/40 px-8 py-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={creatingDraft}
-                      onClick={() => void startCompose("reply")}
-                    >
-                      <ReplyIcon className="mr-1.5 size-3.5" />
-                      Reply
-                    </Button>
+                )}
+
+                <div className="flex shrink-0 items-center gap-2 border-t border-border/40 px-8 py-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={creatingDraft}
+                    onClick={() => void startCompose("reply")}
+                  >
+                    <ReplyIcon className="mr-1.5 size-3.5" />
+                    Reply
+                  </Button>
+                  {canReplyAll && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -1501,28 +1544,28 @@ export function EmailsPage() {
                       <ReplyAllIcon className="mr-1.5 size-3.5" />
                       Reply All
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={creatingDraft}
-                      onClick={() => void startCompose("forward")}
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={creatingDraft}
+                    onClick={() => void startCompose("forward")}
+                  >
+                    <ForwardIcon className="mr-1.5 size-3.5" />
+                    Forward
+                  </Button>
+                  {threadDrafts.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveDraftId(threadDrafts[0]._id)}
+                      className="ml-auto text-[11px] text-muted-foreground/70 underline decoration-dotted underline-offset-2 hover:text-foreground"
                     >
-                      <ForwardIcon className="mr-1.5 size-3.5" />
-                      Forward
-                    </Button>
-                    {threadDrafts.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setActiveDraftId(threadDrafts[0]._id)}
-                        className="ml-auto text-[11px] text-muted-foreground/70 underline decoration-dotted underline-offset-2 hover:text-foreground"
-                      >
-                        {threadDrafts.length === 1
-                          ? "Resume saved draft"
-                          : `${threadDrafts.length} saved drafts`}
-                      </button>
-                    )}
-                  </div>
-                )}
+                      {threadDrafts.length === 1
+                        ? "Resume saved draft"
+                        : `${threadDrafts.length} saved drafts`}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </ResizablePanel>

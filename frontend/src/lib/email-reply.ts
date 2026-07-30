@@ -76,10 +76,17 @@ export interface ThreadMessage {
   attachments: EmailAttachmentRef[]
   pendingAttachments: PendingAttachment[]
   updatedAt: string
+  /**
+   * Server-computed, since deciding this needs the account's own address and the
+   * same address parsing the send path uses. False when replying-all would not
+   * reach anyone beyond a plain reply, so the control can be hidden.
+   */
+  canReplyAll: boolean
 }
 
 export interface ThreadResponse {
   threadId: string
+  accountAddress: string | null
   messages: ThreadMessage[]
   drafts: ThreadMessage[]
   created?: number
@@ -144,10 +151,19 @@ export function deleteDraft(draftId: string): Promise<{ deleted: boolean }> {
   })
 }
 
-export function sendDraft(draftId: string, input: DraftInput): Promise<ThreadMessage> {
-  return request<ThreadMessage>(`${EMAIL_API_BASE}/drafts/${draftId}/send`, {
+export interface SentMessage extends ThreadMessage {
+  /** Set when the message went out but the follow-up archive did not. */
+  archiveError: string | null
+}
+
+export function sendDraft(
+  draftId: string,
+  input: DraftInput,
+  options: { archive?: boolean } = {}
+): Promise<SentMessage> {
+  return request<SentMessage>(`${EMAIL_API_BASE}/drafts/${draftId}/send`, {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, archive: options.archive === true }),
   })
 }
 

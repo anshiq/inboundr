@@ -4,9 +4,11 @@ import { GmailAccount, type IGmailAccount } from "../models/gmail-account.model"
 import { decryptSecret, encryptSecret } from "../lib/crypto";
 import { gmailOAuthRedirectUri } from "./origins.config";
 
+export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+
 export const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
-  "https://www.googleapis.com/auth/gmail.send",
+  GMAIL_SEND_SCOPE,
 ];
 
 export function getGoogleOAuthClient(): OAuth2Client {
