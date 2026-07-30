@@ -164,17 +164,18 @@ export async function getEmailById(
   });
 
   const message = res.data;
+  const payload = await parseMessagePayload(gmail, message.id!, message.payload);
+
+  return parseHeadersToEmail(message, payload);
+}
+
+function parseHeadersToEmail(
+  message: gmail_v1.Schema$Message,
+  parsed: PayloadParseResult
+): ParsedEmail {
   const headers = message.payload?.headers ?? [];
-
   const getHeader = (name: string): string =>
-    headers.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ??
-    "";
-
-  const { bodyText, bodyHtml, attachments } = await parseMessagePayload(
-    gmail,
-    message.id!,
-    message.payload
-  );
+    headers.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? "";
 
   return {
     messageId: message.id!,
@@ -183,18 +184,73 @@ export async function getEmailById(
     rfcMessageId: getHeader("Message-ID") || null,
     references: getHeader("References") || null,
     inReplyTo: getHeader("In-Reply-To") || null,
+    replyTo: getHeader("Reply-To") || null,
     from: getHeader("From"),
     to: getHeader("To"),
     cc: getHeader("Cc") || null,
     bcc: getHeader("Bcc") || null,
     subject: getHeader("Subject"),
     date: getHeader("Date"),
-    bodyText,
-    bodyHtml,
+    bodyText: parsed.bodyText,
+    bodyHtml: parsed.bodyHtml,
     snippet: message.snippet ?? null,
     labels: message.labelIds ?? [],
-    attachments,
+    attachments: parsed.attachments,
   };
+}
+
+/**
+ * Backfills a Gmail conversation into the local store so the thread view can
+ * show messages we never ingested, including anything sent straight from Gmail.
+ *
+ * Deliberately does not kick off RFQ processing: the watcher owns that, and
+ * running it here would create duplicate RFQs for messages already classified.
+ */
+export async function syncThread(
+  account: IGmailAccount,
+  threadId: string
+): Promise<number> {
+  const gmail = await getGmailClientForAccount(account);
+
+  const res = await gmail.users.threads.get({
+    userId: "me",
+    id: threadId,
+    format: "full",
+  });
+
+  let created = 0;
+
+  for (const message of res.data.messages ?? []) {
+    if (!message.id) continue;
+
+    const exists = await Email.exists({
+      gmailAccountId: account._id,
+      messageId: message.id,
+    }).lean();
+    if (exists) continue;
+
+    try {
+      const payload = await parseMessagePayload(gmail, message.id, message.payload);
+      const parsed = parseHeadersToEmail(message, payload);
+      const direction = isSelfSentEmail(account, parsed) ? "outbound" : "inbound";
+
+      await Email.create({
+        userId: account.userId,
+        ...(account.organizationId ? { organizationId: account.organizationId } : {}),
+        gmailAccountId: account._id,
+        ...parsed,
+        date: new Date(parsed.date),
+        direction,
+        status: "processed",
+        ...(direction === "outbound" ? { sendStatus: "sent" } : {}),
+      });
+      created++;
+    } catch (err) {
+      console.error(`Failed to sync thread message ${message.id}:`, err);
+    }
+  }
+
+  return created;
 }
 
 interface PayloadParseResult {

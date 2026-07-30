@@ -9,6 +9,17 @@ export interface IEmailAttachment {
   attachmentId: string;
 }
 
+export interface IEmailPendingAttachment {
+  key: string;
+  filename: string;
+  contentType: string;
+  size: number;
+}
+
+export type EmailDirection = "inbound" | "outbound";
+export type EmailKind = "reply" | "reply_all" | "forward";
+export type EmailSendStatus = "draft" | "sending" | "sent" | "failed";
+
 export interface IEmail extends Document {
   userId: string;
   organizationId: mongoose.Types.ObjectId;
@@ -19,6 +30,7 @@ export interface IEmail extends Document {
   rfcMessageId: string | null;
   references: string | null;
   inReplyTo: string | null;
+  replyTo: string | null;
   from: string;
   to: string;
   cc: string | null;
@@ -33,6 +45,12 @@ export interface IEmail extends Document {
   status: "received" | "processing" | "processed" | "failed";
   processedAt: Date | null;
   errorMessage: string | null;
+  direction: EmailDirection;
+  kind: EmailKind | null;
+  inReplyToEmailId: mongoose.Types.ObjectId | null;
+  sendStatus: EmailSendStatus | null;
+  sendError: string | null;
+  pendingAttachments: IEmailPendingAttachment[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -46,6 +64,21 @@ const emailAttachmentSchema = new Schema<IEmailAttachment>(
   },
   { _id: false }
 );
+
+const emailPendingAttachmentSchema = new Schema<IEmailPendingAttachment>(
+  {
+    key: { type: String, required: true },
+    filename: { type: String, required: true },
+    contentType: { type: String, required: true },
+    size: { type: Number, required: true },
+  },
+  { _id: false }
+);
+
+// Outbound rows start life as drafts, before Gmail has assigned them any ids.
+function requiredForInbound(this: IEmail): boolean {
+  return this.direction !== "outbound";
+}
 
 const emailSchema = new Schema<IEmail>(
   {
@@ -62,17 +95,18 @@ const emailSchema = new Schema<IEmail>(
       required: true,
       index: true,
     },
-    messageId: { type: String, required: true },
-    threadId: { type: String, required: true, index: true },
-    historyId: { type: String, required: true },
+    messageId: { type: String, required: requiredForInbound },
+    threadId: { type: String, required: requiredForInbound, index: true },
+    historyId: { type: String, required: requiredForInbound },
     rfcMessageId: { type: String, default: null },
     references: { type: String, default: null },
     inReplyTo: { type: String, default: null },
+    replyTo: { type: String, default: null },
     from: { type: String, required: true },
-    to: { type: String, required: true },
+    to: { type: String, required: requiredForInbound, default: "" },
     cc: { type: String, default: null },
     bcc: { type: String, default: null },
-    subject: { type: String, required: true },
+    subject: { type: String, required: requiredForInbound, default: "" },
     date: { type: Date, required: true },
     bodyText: { type: String, default: null },
     bodyHtml: { type: String, default: null },
@@ -87,6 +121,29 @@ const emailSchema = new Schema<IEmail>(
     },
     processedAt: { type: Date, default: null },
     errorMessage: { type: String, default: null },
+    direction: {
+      type: String,
+      enum: ["inbound", "outbound"],
+      default: "inbound",
+      index: true,
+    },
+    kind: {
+      type: String,
+      enum: ["reply", "reply_all", "forward"],
+      default: null,
+    },
+    inReplyToEmailId: {
+      type: Schema.Types.ObjectId,
+      ref: "Email",
+      default: null,
+    },
+    sendStatus: {
+      type: String,
+      enum: ["draft", "sending", "sent", "failed"],
+      default: null,
+    },
+    sendError: { type: String, default: null },
+    pendingAttachments: { type: [emailPendingAttachmentSchema], default: [] },
   },
   { timestamps: true }
 );
@@ -95,7 +152,13 @@ emailSchema.index({ userId: 1, status: 1, createdAt: -1 });
 emailSchema.index({ userId: 1, from: 1, createdAt: -1 });
 emailSchema.index({ organizationId: 1, status: 1, createdAt: -1 });
 emailSchema.index({ organizationId: 1, from: 1, createdAt: -1 });
-emailSchema.index({ gmailAccountId: 1, messageId: 1 }, { unique: true });
+emailSchema.index({ userId: 1, organizationId: 1, direction: 1, date: -1 });
+emailSchema.index({ organizationId: 1, direction: 1, date: -1 });
+// Partial so that many drafts, which have no messageId at all, can coexist.
+emailSchema.index(
+  { gmailAccountId: 1, messageId: 1 },
+  { unique: true, partialFilterExpression: { messageId: { $type: "string" } } }
+);
 
 export const Email = mongoose.model<IEmail>("Email", emailSchema);
 

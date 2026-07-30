@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearch } from "@tanstack/react-router"
 
 import { AppLayout } from "@/components/app-layout"
@@ -135,6 +135,7 @@ interface GmailAccount {
   watchExpiration: string | null
   status: "connected" | "expired" | "revoked" | "error"
   errorMessage: string | null
+  signatureHtml: string | null
   createdAt: string
   updatedAt: string
 }
@@ -1733,47 +1734,151 @@ function AccountTab() {
             </div>
           ) : (
             accounts.map((account) => (
-              <div key={account._id} className="flex items-center justify-between px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
-                    <MailIcon className="size-4 text-primary" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium">{account.emailAddress}</p>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                        account.status === "connected"
-                          ? "bg-success/10 text-success"
-                          : "bg-warning/10 text-warning"
-                      }`}>
-                        {account.status}
-                      </span>
+              <div key={account._id} className="px-5 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
+                      <MailIcon className="size-4 text-primary" />
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {account.watchExpiration
-                        ? `Watch renews before ${formatDate(account.watchExpiration)}`
-                        : "Watch will start after Google authorization completes"}
-                    </p>
-                    {account.errorMessage && (
-                      <p className="text-xs text-destructive">{account.errorMessage}</p>
-                    )}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{account.emailAddress}</p>
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                          account.status === "connected"
+                            ? "bg-success/10 text-success"
+                            : "bg-warning/10 text-warning"
+                        }`}>
+                          {account.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {account.watchExpiration
+                          ? `Watch renews before ${formatDate(account.watchExpiration)}`
+                          : "Watch will start after Google authorization completes"}
+                      </p>
+                      {account.errorMessage && (
+                        <p className="text-xs text-destructive">{account.errorMessage}</p>
+                      )}
+                    </div>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => handleDisconnectGmail(account._id)}
+                    disabled={disconnectingId === account._id}
+                  >
+                    {disconnectingId === account._id && <Spinner data-icon="inline-start" />}
+                    Disconnect
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => handleDisconnectGmail(account._id)}
-                  disabled={disconnectingId === account._id}
-                >
-                  {disconnectingId === account._id && <Spinner data-icon="inline-start" />}
-                  Disconnect
-                </Button>
+
+                <GmailSignatureEditor
+                  account={account}
+                  onSaved={(updated) =>
+                    setAccounts((current) =>
+                      current.map((item) => (item._id === updated._id ? updated : item))
+                    )
+                  }
+                />
               </div>
             ))
           )}
         </div>
       </SettingsCard>
+    </div>
+  )
+}
+
+const LazyRichTextEditor = lazy(() =>
+  import("@/components/email/rich-text-editor").then((module) => ({
+    default: module.RichTextEditor,
+  }))
+)
+
+function GmailSignatureEditor({
+  account,
+  onSaved,
+}: {
+  account: GmailAccount
+  onSaved: (account: GmailAccount) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [value, setValue] = useState(account.signatureHtml ?? "")
+  const [saving, setSaving] = useState(false)
+
+  const hasSignature = Boolean(account.signatureHtml)
+  const dirty = value !== (account.signatureHtml ?? "")
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const res = await fetch(
+        `${API_ORIGIN}/api/v1/gmail/accounts/${account._id}/signature`,
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signatureHtml: value.trim() ? value : null }),
+        }
+      )
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`)
+
+      onSaved(data.account as GmailAccount)
+      toast.success("Signature saved")
+      setOpen(false)
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save signature")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-3 ml-12 text-xs text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
+      >
+        {hasSignature ? "Edit signature" : "Add a signature"}
+      </button>
+    )
+  }
+
+  return (
+    <div className="mt-3 ml-12 space-y-2">
+      <p className="text-xs text-muted-foreground">
+        Added to the bottom of new replies from this address. You can trim it before sending.
+      </p>
+      <div className="overflow-hidden rounded-lg border border-border/60">
+        <Suspense fallback={<div className="h-28 animate-pulse bg-muted/40" />}>
+          <LazyRichTextEditor
+            value={value}
+            onChange={setValue}
+            placeholder="Regards, ..."
+            disabled={saving}
+          />
+        </Suspense>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={handleSave} disabled={saving || !dirty}>
+          {saving && <Spinner data-icon="inline-start" />}
+          Save signature
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={saving}
+          onClick={() => {
+            setValue(account.signatureHtml ?? "")
+            setOpen(false)
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
     </div>
   )
 }

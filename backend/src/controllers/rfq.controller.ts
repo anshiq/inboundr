@@ -7,6 +7,7 @@ import { generateQuoteReply } from "../agents/generate_quote";
 import type { AuthenticatedRequest, OrganizationRequest } from "../middleware/auth.middleware";
 import { GmailAccount } from "../models/gmail-account.model";
 import { sendQuoteOnGmailThread } from "../services/gmail-send.service";
+import { recordSentOutboundEmail } from "../services/email-reply.service";
 import { Customer } from "../models/customer.model";
 import {
   getOrCreateCustomerSettings,
@@ -1195,6 +1196,18 @@ export const sendQuoteReply = async (
         },
         { new: true }
       ).lean();
+
+      // Store the quote as an outbound message so it shows in the inbox thread
+      // right away instead of waiting for the next Gmail thread sync.
+      if (gmailMessageId) {
+        await recordSentOutboundEmail({
+          account,
+          sourceEmail: email,
+          sentMessageId: gmailMessageId,
+        }).catch((persistErr) =>
+          console.error("Failed to record sent quote email:", persistErr)
+        );
+      }
 
       void emitDomainEvent("rfq.quote_sent", {
         rfqId: String(rfq._id),

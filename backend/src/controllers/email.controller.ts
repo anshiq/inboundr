@@ -1,13 +1,30 @@
 import type { Request, Response } from "express";
-import { getAttachment, processHistoryUpdate } from "../services/email.service";
-import { Email } from "../models/email.model";
-import { GmailAccount } from "../models/gmail-account.model";
+import { getAttachment, processHistoryUpdate, syncThread } from "../services/email.service";
+import { Email, type EmailKind, type IEmail } from "../models/email.model";
+import { GmailAccount, type IGmailAccount } from "../models/gmail-account.model";
 import { RFQ } from "../models/rfq.model";
 import type { AuthenticatedRequest, OrganizationRequest } from "../middleware/auth.middleware";
 import { streamEmailPdf } from "../services/email-pdf.service";
 import { resolveOrganizationPdfBranding } from "../services/organization-pdf-branding.service";
 import { buildRFQProcessingInput, hasRFQProcessableContent } from "../services/rfq-input.service";
 import { processEmailForRFQ } from "../services/rfq.service";
+import { sendComposedMessage } from "../services/gmail-send.service";
+import {
+  AttachmentError,
+  buildForwardedBody,
+  buildQuotedOriginal,
+  deriveRecipients,
+  normalizeSubject,
+  persistOutboundEmail,
+  resolveOutboundAttachments,
+  sanitizeComposedHtml,
+} from "../services/email-reply.service";
+import {
+  EMAIL_ATTACHMENT_ALLOWED_MIME_TYPES,
+  EMAIL_ATTACHMENT_MAX_FILE_SIZE,
+  isBlockedAttachmentFilename,
+} from "../config/upload-constraints.config";
+import { emitDomainEvent } from "../events/domain-events";
 
 const INLINE_ATTACHMENT_MIME_TYPES = new Set([
   "application/pdf",
@@ -100,15 +117,24 @@ export const listEmails = async (
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;
 
+    // Legacy rows predate `direction`, so $ne matches them as inbound. The INBOX
+    // label keeps thread-synced messages the user archived in Gmail out of the list.
+    const listFilter = {
+      userId: authReq.user.id,
+      organizationId: organization._id,
+      direction: { $ne: "outbound" as const },
+      labels: "INBOX",
+    };
+
     const [emails, total] = await Promise.all([
       Email.find()
-        .where({ userId: authReq.user.id, organizationId: organization._id })
+        .where(listFilter)
         .select("-bodyText -bodyHtml")
         .sort({ date: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Email.countDocuments({ userId: authReq.user.id, organizationId: organization._id }),
+      Email.countDocuments(listFilter),
     ]);
 
     const emailIds = emails.map((email) => email._id);
@@ -200,6 +226,7 @@ export const reprocessEmail = async (
       _id: req.params.id,
       userId: authReq.user.id,
       organizationId: organization._id,
+      direction: { $ne: "outbound" },
     });
 
     if (!email) {
@@ -347,5 +374,431 @@ export const getEmailAttachment = async (
   } catch (err) {
     console.error("Error fetching email attachment:", err);
     res.status(500).json({ error: "Failed to fetch attachment" });
+  }
+};
+
+// ── Threads, drafts and sending ──────────────────────────────────────────────
+
+const EMAIL_ADDRESS_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const REPLY_KINDS: EmailKind[] = ["reply", "reply_all", "forward"];
+
+interface RequestScope {
+  userId: string;
+  organizationId: OrganizationRequest["organization"]["_id"];
+}
+
+function requestScope(req: Request): RequestScope {
+  return {
+    userId: (req as AuthenticatedRequest).user.id,
+    organizationId: (req as OrganizationRequest).organization._id,
+  };
+}
+
+function serializeMessage(email: IEmail | Record<string, any>) {
+  const doc = "toObject" in email ? (email as IEmail).toObject() : email;
+  const { pendingAttachments, ...rest } = doc as Record<string, any>;
+  return {
+    ...rest,
+    pendingAttachments: pendingAttachments ?? [],
+  };
+}
+
+async function loadAccountFor(
+  email: IEmail,
+  scope: RequestScope
+): Promise<IGmailAccount | null> {
+  return GmailAccount.findOne({
+    _id: email.gmailAccountId,
+    userId: scope.userId,
+    organizationId: scope.organizationId,
+  });
+}
+
+/** Sent and received messages only; drafts have no Gmail message id yet. */
+async function loadThreadMessages(email: IEmail, scope: RequestScope) {
+  return Email.find({
+    userId: scope.userId,
+    organizationId: scope.organizationId,
+    gmailAccountId: email.gmailAccountId,
+    threadId: email.threadId,
+    messageId: { $exists: true, $ne: null },
+  })
+    .sort({ date: 1 })
+    .lean();
+}
+
+/**
+ * A reply is anchored to the newest message in the thread, which is often not
+ * the one the user has selected, so drafts are matched against every message in
+ * the conversation.
+ */
+async function loadThreadDrafts(parentIds: IEmail["_id"][], scope: RequestScope) {
+  return Email.find({
+    userId: scope.userId,
+    organizationId: scope.organizationId,
+    direction: "outbound",
+    inReplyToEmailId: { $in: parentIds },
+    sendStatus: { $in: ["draft", "failed"] },
+  })
+    .sort({ updatedAt: 1 })
+    .lean();
+}
+
+async function respondWithThread(
+  res: Response,
+  email: IEmail,
+  scope: RequestScope,
+  extra: Record<string, unknown> = {}
+): Promise<void> {
+  const messages = await loadThreadMessages(email, scope);
+  const drafts = await loadThreadDrafts(
+    [email._id, ...messages.map((message) => message._id)],
+    scope
+  );
+
+  res.json({
+    threadId: email.threadId,
+    messages: messages.map(serializeMessage),
+    drafts: drafts.map(serializeMessage),
+    ...extra,
+  });
+}
+
+export const getEmailThread = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const scope = requestScope(req);
+    const email = await Email.findOne({ _id: req.params.id, ...scope });
+    if (!email) {
+      res.status(404).json({ error: "Email not found" });
+      return;
+    }
+
+    await respondWithThread(res, email, scope);
+  } catch (err) {
+    console.error("Error loading email thread:", err);
+    res.status(500).json({ error: "Failed to load thread" });
+  }
+};
+
+export const syncEmailThread = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const scope = requestScope(req);
+    const email = await Email.findOne({ _id: req.params.id, ...scope });
+    if (!email) {
+      res.status(404).json({ error: "Email not found" });
+      return;
+    }
+
+    const account = await loadAccountFor(email, scope);
+    if (!account) {
+      res.status(404).json({ error: "Gmail account not found" });
+      return;
+    }
+
+    let created = 0;
+    try {
+      created = await syncThread(account, email.threadId);
+    } catch (err) {
+      // A sync failure should not blank the thread the client already has.
+      console.error(`Failed to sync Gmail thread ${email.threadId}:`, err);
+    }
+
+    await respondWithThread(res, email, scope, { created });
+  } catch (err) {
+    console.error("Error syncing email thread:", err);
+    res.status(500).json({ error: "Failed to sync thread" });
+  }
+};
+
+function parseKind(value: unknown): EmailKind | null {
+  return REPLY_KINDS.includes(value as EmailKind) ? (value as EmailKind) : null;
+}
+
+function normalizeAttachmentInput(value: unknown): {
+  attachments: { key: string; filename: string; contentType: string; size: number }[];
+  error: string | null;
+} {
+  if (value === undefined) return { attachments: [], error: null };
+  if (!Array.isArray(value)) return { attachments: [], error: "Attachments must be a list" };
+
+  const attachments = [];
+  for (const item of value) {
+    const key = String((item as any)?.key ?? "").trim();
+    const filename = String((item as any)?.filename ?? "").trim();
+    const contentType = String((item as any)?.contentType ?? "").trim().toLowerCase();
+    const size = Number((item as any)?.size ?? 0);
+
+    if (!key || !filename) return { attachments: [], error: "Attachment is missing a key or name" };
+    if (!(EMAIL_ATTACHMENT_ALLOWED_MIME_TYPES as readonly string[]).includes(contentType)) {
+      return { attachments: [], error: `${filename} is not an allowed file type` };
+    }
+    if (isBlockedAttachmentFilename(filename)) {
+      return { attachments: [], error: `${filename} cannot be sent by email` };
+    }
+    if (!Number.isFinite(size) || size <= 0 || size > EMAIL_ATTACHMENT_MAX_FILE_SIZE) {
+      const limitMb = Math.round(EMAIL_ATTACHMENT_MAX_FILE_SIZE / 1024 / 1024);
+      return { attachments: [], error: `${filename} must be ${limitMb}MB or smaller` };
+    }
+
+    attachments.push({ key, filename, contentType, size });
+  }
+
+  return { attachments, error: null };
+}
+
+function applyDraftFields(draft: IEmail, body: Record<string, unknown>): string | null {
+  if (typeof body.to === "string") draft.to = body.to.trim();
+  if (typeof body.cc === "string") draft.cc = body.cc.trim() || null;
+  if (typeof body.bcc === "string") draft.bcc = body.bcc.trim() || null;
+  if (typeof body.subject === "string") draft.subject = body.subject;
+  if (typeof body.bodyHtml === "string") {
+    draft.bodyHtml = sanitizeComposedHtml(body.bodyHtml);
+  }
+
+  if (body.pendingAttachments !== undefined) {
+    const { attachments, error } = normalizeAttachmentInput(body.pendingAttachments);
+    if (error) return error;
+    draft.pendingAttachments = attachments;
+  }
+
+  return null;
+}
+
+export const createEmailDraft = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const scope = requestScope(req);
+    const kind = parseKind((req.body ?? {}).kind);
+    if (!kind) {
+      res.status(400).json({ error: "A reply kind of reply, reply_all or forward is required" });
+      return;
+    }
+
+    const parent = await Email.findOne({ _id: req.params.id, ...scope });
+    if (!parent) {
+      res.status(404).json({ error: "Email not found" });
+      return;
+    }
+
+    const account = await loadAccountFor(parent, scope);
+    if (!account) {
+      res.status(404).json({ error: "Gmail account not found" });
+      return;
+    }
+
+    const derived = deriveRecipients(parent, kind, account.emailAddress);
+    const draft = new Email({
+      userId: scope.userId,
+      organizationId: scope.organizationId,
+      gmailAccountId: parent.gmailAccountId,
+      direction: "outbound",
+      kind,
+      inReplyToEmailId: parent._id,
+      sendStatus: "draft",
+      // Forwards start a new conversation, so they carry no thread.
+      threadId: kind === "forward" ? undefined : parent.threadId,
+      from: account.emailAddress,
+      to: derived.to,
+      cc: derived.cc,
+      subject: normalizeSubject(parent.subject, kind),
+      date: new Date(),
+      status: "processed",
+    });
+
+    const validationError = applyDraftFields(draft, req.body ?? {});
+    if (validationError) {
+      res.status(400).json({ error: validationError });
+      return;
+    }
+
+    await draft.save();
+    res.status(201).json(serializeMessage(draft));
+  } catch (err) {
+    console.error("Error creating email draft:", err);
+    res.status(500).json({ error: "Failed to create draft" });
+  }
+};
+
+async function loadDraft(req: Request, scope: RequestScope): Promise<IEmail | null> {
+  return Email.findOne({
+    _id: req.params.draftId,
+    ...scope,
+    direction: "outbound",
+    sendStatus: { $in: ["draft", "failed"] },
+  });
+}
+
+export const updateEmailDraft = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const scope = requestScope(req);
+    const draft = await loadDraft(req, scope);
+    if (!draft) {
+      res.status(404).json({ error: "Draft not found" });
+      return;
+    }
+
+    const validationError = applyDraftFields(draft, req.body ?? {});
+    if (validationError) {
+      res.status(400).json({ error: validationError });
+      return;
+    }
+
+    draft.sendStatus = "draft";
+    draft.sendError = null;
+    await draft.save();
+    res.json(serializeMessage(draft));
+  } catch (err) {
+    console.error("Error updating email draft:", err);
+    res.status(500).json({ error: "Failed to update draft" });
+  }
+};
+
+export const deleteEmailDraft = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const scope = requestScope(req);
+    const draft = await loadDraft(req, scope);
+    if (!draft) {
+      res.status(404).json({ error: "Draft not found" });
+      return;
+    }
+
+    await draft.deleteOne();
+    res.json({ deleted: true });
+  } catch (err) {
+    console.error("Error deleting email draft:", err);
+    res.status(500).json({ error: "Failed to delete draft" });
+  }
+};
+
+export const sendEmailDraft = async (req: Request, res: Response): Promise<void> => {
+  const scope = requestScope(req);
+  let draft: IEmail | null = null;
+
+  try {
+    draft = await loadDraft(req, scope);
+    if (!draft) {
+      res.status(404).json({ error: "Draft not found" });
+      return;
+    }
+
+    // Accept a final round of edits so an unflushed autosave is not lost.
+    const validationError = applyDraftFields(draft, req.body ?? {});
+    if (validationError) {
+      res.status(400).json({ error: validationError });
+      return;
+    }
+
+    const recipients = (draft.to ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (recipients.length === 0) {
+      res.status(400).json({ error: "At least one recipient is required" });
+      return;
+    }
+
+    const invalid = recipients.find((value) => {
+      const address = value.match(/<([^>]+)>/)?.[1] ?? value;
+      return !EMAIL_ADDRESS_RE.test(address.trim());
+    });
+    if (invalid) {
+      res.status(400).json({ error: `${invalid} is not a valid email address` });
+      return;
+    }
+
+    const account = await loadAccountFor(draft, scope);
+    if (!account) {
+      res.status(404).json({ error: "Gmail account not found" });
+      return;
+    }
+
+    const parent = draft.inReplyToEmailId
+      ? await Email.findOne({ _id: draft.inReplyToEmailId, ...scope })
+      : null;
+
+    const kind = draft.kind ?? "reply";
+    const composedHtml = draft.bodyHtml ?? "";
+    let html = composedHtml;
+
+    if (parent) {
+      const appended =
+        kind === "forward" ? buildForwardedBody(parent) : buildQuotedOriginal(parent);
+      html = `${composedHtml}\n${appended.html}`;
+    }
+
+    let attachments;
+    try {
+      const resolved = await resolveOutboundAttachments({
+        account,
+        draft,
+        includeOriginalFrom: kind === "forward" ? parent : null,
+      });
+      attachments = resolved.attachments;
+    } catch (err) {
+      if (err instanceof AttachmentError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
+
+    draft.sendStatus = "sending";
+    draft.sendError = null;
+    await draft.save();
+
+    const isThreadedReply = kind !== "forward" && Boolean(parent);
+    const references = parent
+      ? [parent.references, parent.inReplyTo, parent.rfcMessageId]
+          .filter(Boolean)
+          .join(" ")
+          .trim() || undefined
+      : undefined;
+
+    const sentMessageId = await sendComposedMessage({
+      account,
+      threadId: isThreadedReply ? parent!.threadId : null,
+      headers: {
+        From: account.emailAddress,
+        To: draft.to,
+        Cc: draft.cc ?? undefined,
+        Bcc: draft.bcc ?? undefined,
+        Subject: draft.subject || "(no subject)",
+        "In-Reply-To": isThreadedReply ? parent!.rfcMessageId ?? undefined : undefined,
+        References: isThreadedReply ? references : undefined,
+      },
+      html,
+      attachments,
+    });
+
+    if (!sentMessageId) {
+      throw new Error("Gmail did not return a message id");
+    }
+
+    const sent = await persistOutboundEmail({ account, draft, sentMessageId });
+
+    void emitDomainEvent("email.reply_sent", {
+      emailId: sent._id.toString(),
+      inReplyToEmailId: parent?._id.toString() ?? null,
+      threadId: sent.threadId ?? null,
+      kind,
+      to: sent.to,
+      subject: sent.subject,
+      gmailMessageId: sentMessageId,
+      organizationId: scope.organizationId.toString(),
+      userId: scope.userId,
+    });
+
+    res.json(serializeMessage(sent));
+  } catch (err) {
+    console.error("Error sending email draft:", err);
+
+    if (draft) {
+      draft.sendStatus = "failed";
+      draft.sendError = err instanceof Error ? err.message : "Failed to send";
+      await draft.save().catch(() => undefined);
+    }
+
+    res.status(502).json({
+      error: err instanceof Error ? err.message : "Failed to send reply",
+    });
   }
 };

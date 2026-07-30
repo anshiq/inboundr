@@ -7,6 +7,7 @@ import { startWatch, unlinkGmailAccount } from "../services/gmail-watcher.servic
 import type { AuthenticatedRequest, OrganizationRequest } from "../middleware/auth.middleware";
 import { frontendOrigin } from "../config/origins.config";
 import { hasEffectiveFeature } from "../services/entitlement.service";
+import { sanitizeComposedHtml } from "../services/email-reply.service";
 
 export async function connectGmail(req: Request, res: Response): Promise<void> {
   try {
@@ -85,6 +86,47 @@ export async function listGmailAccounts(req: Request, res: Response): Promise<vo
   } catch (err) {
     console.error("Failed to list Gmail accounts:", err);
     res.status(500).json({ error: "Failed to fetch Gmail accounts" });
+  }
+}
+
+export async function updateGmailSignature(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const organization = (req as OrganizationRequest).organization;
+    const raw = (req.body ?? {}).signatureHtml;
+
+    if (raw !== null && typeof raw !== "string") {
+      res.status(400).json({ error: "Signature must be a string or null" });
+      return;
+    }
+
+    const sanitized =
+      typeof raw === "string" && raw.trim() ? sanitizeComposedHtml(raw) : null;
+
+    const account = await GmailAccount.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        userId: authReq.user.id,
+        organizationId: organization._id,
+      },
+      { signatureHtml: sanitized },
+      { new: true }
+    )
+      .select("-accessToken -refreshToken")
+      .lean();
+
+    if (!account) {
+      res.status(404).json({ error: "Gmail account not found" });
+      return;
+    }
+
+    res.json({ account });
+  } catch (err) {
+    console.error("Failed to update Gmail signature:", err);
+    res.status(500).json({ error: "Failed to update signature" });
   }
 }
 

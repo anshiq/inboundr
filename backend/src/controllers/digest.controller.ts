@@ -227,7 +227,11 @@ export async function sendTestDigest(
 
     if (sections.emailVolume) {
       const [total, rfqDocs] = await Promise.all([
-        Email.countDocuments({ organizationId: orgId, date: { $gte: from, $lt: to } }),
+        Email.countDocuments({
+          organizationId: orgId,
+          direction: { $ne: "outbound" },
+          date: { $gte: from, $lt: to },
+        }),
         RFQ.aggregate([
           { $match: { organizationId: orgId, createdAt: { $gte: from, $lt: to } } },
           { $group: { _id: null, rfqs: { $sum: { $cond: ["$isRFQ", 1, 0] } }, nonRfqs: { $sum: { $cond: ["$isRFQ", 0, 1] } } } },

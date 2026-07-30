@@ -14,6 +14,7 @@ export interface IGmailAccount extends Document {
   watchExpiration: Date | null;
   status: GmailAccountStatus;
   errorMessage: string | null;
+  signatureHtml: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -41,6 +42,7 @@ const gmailAccountSchema = new Schema<IGmailAccount>(
       index: true,
     },
     errorMessage: { type: String, default: null },
+    signatureHtml: { type: String, default: null },
   },
   { timestamps: true }
 );

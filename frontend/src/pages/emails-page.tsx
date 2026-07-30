@@ -31,7 +31,20 @@ import {
   EyeIcon,
   ChevronDownIcon,
   FileTextIcon,
+  ReplyIcon,
+  ReplyAllIcon,
+  ForwardIcon,
 } from "lucide-react"
+
+import { ReplyComposer } from "@/components/email/reply-composer"
+import { ThreadStack } from "@/components/email/thread-stack"
+import {
+  createDraft,
+  fetchThread,
+  syncThread,
+  type ReplyKind,
+  type ThreadMessage,
+} from "@/lib/email-reply"
 
 import { API_ORIGIN } from "@/lib/env"
 const API_BASE = `${API_ORIGIN}/api/v1/email`
@@ -728,14 +741,19 @@ export function EmailsPage() {
   const [detail, setDetail] = useState<EmailDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [selectedAttachment, setSelectedAttachment] = useState<EmailDetail["attachments"][number] | null>(null)
+  // Attachments can belong to any message in the thread, not just the selected one.
+  const [attachmentOwnerId, setAttachmentOwnerId] = useState<string | null>(null)
 
   const [refreshing, setRefreshing] = useState(false)
   const [reprocessingId, setReprocessingId] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const emailDocument = useMemo(
-    () => (detail?.bodyHtml ? buildEmailDocument(detail.bodyHtml) : null),
-    [detail?.bodyHtml]
-  )
+
+  const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([])
+  const [threadDrafts, setThreadDrafts] = useState<ThreadMessage[]>([])
+  const [threadLoading, setThreadLoading] = useState(false)
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(null)
+  const [creatingDraft, setCreatingDraft] = useState(false)
+  const [signaturesByAccount, setSignaturesByAccount] = useState<Record<string, string | null>>({})
 
   const fetchList = useCallback(async (p: number) => {
     setListLoading(true)
@@ -796,7 +814,70 @@ export function EmailsPage() {
     [navigate],
   )
 
+  const previewAttachment = useCallback(
+    (emailId: string, attachment: EmailAttachment) => {
+      setAttachmentOwnerId(emailId)
+      setSelectedAttachment(attachment)
+    },
+    []
+  )
+
+  const loadThread = useCallback(async (id: string) => {
+    setThreadLoading(true)
+    try {
+      const initial = await fetchThread(id)
+      setThreadMessages(initial.messages)
+      setThreadDrafts(initial.drafts)
+      setThreadLoading(false)
+
+      // Backfill anything Gmail has that we never ingested, such as messages
+      // sent straight from Gmail. Failures here leave the rendered thread alone.
+      try {
+        const synced = await syncThread(id)
+        setThreadMessages(synced.messages)
+        setThreadDrafts(synced.drafts)
+      } catch (err) {
+        console.error("Thread sync failed:", err)
+      }
+    } catch {
+      setThreadMessages([])
+      setThreadDrafts([])
+      setThreadLoading(false)
+    }
+  }, [])
+
   useEffect(() => { fetchList(1) }, [fetchList])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadSignatures() {
+      try {
+        const res = await fetch(`${API_ORIGIN}/api/v1/gmail/accounts`, {
+          credentials: "include",
+        })
+        if (!res.ok) return
+        const data: { accounts?: { emailAddress: string; signatureHtml: string | null }[] } =
+          await res.json()
+        if (cancelled) return
+        setSignaturesByAccount(
+          Object.fromEntries(
+            (data.accounts ?? []).map((account) => [
+              account.emailAddress.toLowerCase(),
+              account.signatureHtml ?? null,
+            ])
+          )
+        )
+      } catch {
+        // A missing signature is not worth surfacing.
+      }
+    }
+
+    void loadSignatures()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     const nextSelectedId = selectedEmailId ?? null
@@ -812,7 +893,12 @@ export function EmailsPage() {
 
   useEffect(() => {
     setSelectedAttachment(null)
-  }, [selectedId])
+    setAttachmentOwnerId(null)
+    setActiveDraftId(null)
+    setThreadMessages([])
+    setThreadDrafts([])
+    if (selectedId) void loadThread(selectedId)
+  }, [selectedId, loadThread])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -858,10 +944,82 @@ export function EmailsPage() {
     }
   }
 
+  const activeDraft = useMemo(
+    () => threadDrafts.find((draft) => draft._id === activeDraftId) ?? null,
+    [threadDrafts, activeDraftId]
+  )
+
+  // The message a reply is anchored to: the newest in the thread, falling back
+  // to the selected email when the thread has not loaded yet.
+  const composeParent = useMemo<ThreadMessage | null>(() => {
+    if (threadMessages.length > 0) {
+      const inbound = [...threadMessages].reverse().find((m) => m.direction === "inbound")
+      return inbound ?? threadMessages[threadMessages.length - 1]
+    }
+    return detail ? (detail as unknown as ThreadMessage) : null
+  }, [threadMessages, detail])
+
+  const startCompose = useCallback(
+    async (kind: ReplyKind) => {
+      if (!composeParent || creatingDraft) return
+
+      // Reuse an open draft of the same kind rather than stacking duplicates.
+      const existing = threadDrafts.find((draft) => draft.kind === kind)
+      if (existing) {
+        setActiveDraftId(existing._id)
+        return
+      }
+
+      setCreatingDraft(true)
+      try {
+        const draft = await createDraft(composeParent._id, kind)
+        setThreadDrafts((current) => [...current, draft])
+        setActiveDraftId(draft._id)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to start a reply")
+      } finally {
+        setCreatingDraft(false)
+      }
+    },
+    [composeParent, creatingDraft, threadDrafts]
+  )
+
+  const handleDraftSaved = useCallback((saved: ThreadMessage) => {
+    setThreadDrafts((current) =>
+      current.map((draft) => (draft._id === saved._id ? saved : draft))
+    )
+  }, [])
+
+  const handleDraftSent = useCallback((sent: ThreadMessage) => {
+    setThreadDrafts((current) => current.filter((draft) => draft._id !== sent._id))
+    // A forward opens its own conversation, so it does not belong in this thread.
+    setThreadMessages((current) => {
+      if (sent.kind === "forward") return current
+      if (current.some((message) => message._id === sent._id)) return current
+      return [...current, sent]
+    })
+    setActiveDraftId(null)
+  }, [])
+
+  const handleDraftDiscarded = useCallback((draftId: string) => {
+    setThreadDrafts((current) => current.filter((draft) => draft._id !== draftId))
+    setActiveDraftId(null)
+  }, [])
+
+  const parentSignature = composeParent
+    ? signaturesByAccount[(detail?.gmailAccountEmail ?? "").toLowerCase()] ?? null
+    : null
+
   // Keyboard navigation
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)
+      ) {
+        return
+      }
 
       if (e.key === "j" || e.key === "k") {
         e.preventDefault()
@@ -875,20 +1033,41 @@ export function EmailsPage() {
       if (e.key === "Escape") {
         if (selectedAttachment) {
           setSelectedAttachment(null)
+        } else if (activeDraftId) {
+          setActiveDraftId(null)
         } else if (detail) {
           selectEmail(null)
         }
       }
 
-      if (e.key === "r" && !e.metaKey && !e.ctrlKey) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+
+      // Shift+R refreshes; plain r/a/f drive the composer, matching Gmail.
+      if (e.key === "R" && e.shiftKey) {
         e.preventDefault()
         handleRefresh()
+        return
+      }
+
+      if (e.shiftKey) return
+
+      if (e.key === "r" && detail) {
+        e.preventDefault()
+        void startCompose("reply")
+      }
+      if (e.key === "a" && detail) {
+        e.preventDefault()
+        void startCompose("reply_all")
+      }
+      if (e.key === "f" && detail) {
+        e.preventDefault()
+        void startCompose("forward")
       }
     }
 
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [emails, selectedId, selectedAttachment, detail, page, selectEmail])
+  }, [emails, selectedId, selectedAttachment, detail, page, selectEmail, startCompose, activeDraftId])
 
   const senderInitial = (from: string) => {
     const { name } = parseSender(from)
@@ -1061,6 +1240,49 @@ export function EmailsPage() {
                       {detail.subject || "(no subject)"}
                     </h1>
                     <div className="flex shrink-0 items-center gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-muted-foreground/50 hover:text-foreground"
+                            onClick={() => void startCompose("reply")}
+                            disabled={creatingDraft}
+                          >
+                            <ReplyIcon className="size-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Reply (R)</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-muted-foreground/50 hover:text-foreground"
+                            onClick={() => void startCompose("reply_all")}
+                            disabled={creatingDraft}
+                          >
+                            <ReplyAllIcon className="size-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Reply All (A)</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-muted-foreground/50 hover:text-foreground"
+                            onClick={() => void startCompose("forward")}
+                            disabled={creatingDraft}
+                          >
+                            <ForwardIcon className="size-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Forward (F)</TooltipContent>
+                      </Tooltip>
+                      <span className="mx-0.5 h-4 w-px bg-border/60" />
                       {canReprocessDetail && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1184,7 +1406,7 @@ export function EmailsPage() {
                             <button
                               type="button"
                               className="surface-inset inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:bg-muted/60"
-                              onClick={() => setSelectedAttachment(att)}
+                              onClick={() => previewAttachment(detail._id, att)}
                             >
                               <PaperclipIcon className="size-3" />
                               {att.filename}
@@ -1224,26 +1446,83 @@ export function EmailsPage() {
                   )}
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-hidden border-t border-border/30">
-                  {emailDocument ? (
-                    <iframe
-                      title="Email content"
-                      className="size-full border-0 bg-white"
-                      sandbox="allow-same-origin"
-                      srcDoc={emailDocument}
-                    />
-                  ) : detail.bodyText ? (
-                    <div className="h-full overflow-y-auto p-8">
-                      <pre className="whitespace-pre-wrap font-[Arial,sans-serif] text-[13px] leading-normal text-foreground/85">
-                        {detail.bodyText}
-                      </pre>
+                <div className="min-h-0 flex-1 overflow-y-auto border-t border-border/30">
+                  {threadLoading && threadMessages.length === 0 ? (
+                    <div className="space-y-2 px-8 py-4">
+                      {Array.from({ length: 2 }).map((_, i) => (
+                        <Skeleton key={i} className="h-14 w-full rounded-xl" />
+                      ))}
                     </div>
                   ) : (
-                    <div className="flex items-center justify-center p-12 text-[13px] text-muted-foreground/50">
-                      No content available
-                    </div>
+                    <ThreadStack
+                      messages={threadMessages}
+                      failedDrafts={threadDrafts.filter(
+                        (draft) => draft.sendStatus === "failed" && draft._id !== activeDraftId
+                      )}
+                      buildDocument={buildEmailDocument}
+                      buildAttachmentUrl={buildAttachmentUrl}
+                      isPreviewable={isPreviewableAttachment}
+                      onPreview={(message, attachment) =>
+                        previewAttachment(message._id, attachment)
+                      }
+                      onResumeDraft={(draft) => setActiveDraftId(draft._id)}
+                    />
                   )}
                 </div>
+
+                {activeDraft && composeParent ? (
+                  <ReplyComposer
+                    key={activeDraft._id}
+                    draft={activeDraft}
+                    parent={composeParent}
+                    signatureHtml={parentSignature}
+                    onSent={handleDraftSent}
+                    onDiscarded={handleDraftDiscarded}
+                    onDraftSaved={handleDraftSaved}
+                    onClose={() => setActiveDraftId(null)}
+                  />
+                ) : (
+                  <div className="flex shrink-0 items-center gap-2 border-t border-border/40 px-8 py-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={creatingDraft}
+                      onClick={() => void startCompose("reply")}
+                    >
+                      <ReplyIcon className="mr-1.5 size-3.5" />
+                      Reply
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={creatingDraft}
+                      onClick={() => void startCompose("reply_all")}
+                    >
+                      <ReplyAllIcon className="mr-1.5 size-3.5" />
+                      Reply All
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={creatingDraft}
+                      onClick={() => void startCompose("forward")}
+                    >
+                      <ForwardIcon className="mr-1.5 size-3.5" />
+                      Forward
+                    </Button>
+                    {threadDrafts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveDraftId(threadDrafts[0]._id)}
+                        className="ml-auto text-[11px] text-muted-foreground/70 underline decoration-dotted underline-offset-2 hover:text-foreground"
+                      >
+                        {threadDrafts.length === 1
+                          ? "Resume saved draft"
+                          : `${threadDrafts.length} saved drafts`}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </ResizablePanel>
@@ -1260,7 +1539,7 @@ export function EmailsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" asChild>
-                    <a href={buildAttachmentUrl(detail._id, selectedAttachment.attachmentId, true)}>
+                    <a href={buildAttachmentUrl(attachmentOwnerId ?? detail._id, selectedAttachment.attachmentId, true)}>
                       <DownloadIcon className="mr-1.5 size-3.5" />
                       Download
                     </a>
@@ -1280,18 +1559,18 @@ export function EmailsPage() {
                   <iframe
                     title={selectedAttachment.filename}
                     className="size-full border-0 bg-white"
-                    src={buildAttachmentUrl(detail._id, selectedAttachment.attachmentId)}
+                    src={buildAttachmentUrl(attachmentOwnerId ?? detail._id, selectedAttachment.attachmentId)}
                   />
                 ) : selectedAttachment.mimeType.startsWith("image/") && isPreviewableAttachment(selectedAttachment) ? (
                   <div className="size-full overflow-auto p-6 text-center">
                     <img
-                      src={buildAttachmentUrl(detail._id, selectedAttachment.attachmentId)}
+                      src={buildAttachmentUrl(attachmentOwnerId ?? detail._id, selectedAttachment.attachmentId)}
                       alt={selectedAttachment.filename}
                       className="mx-auto max-h-full max-w-full rounded-lg object-contain shadow-lg"
                     />
                   </div>
                 ) : isSpreadsheetAttachment(selectedAttachment) ? (
-                  <SpreadsheetAttachmentPreview emailId={detail._id} attachment={selectedAttachment} />
+                  <SpreadsheetAttachmentPreview emailId={attachmentOwnerId ?? detail._id} attachment={selectedAttachment} />
                 ) : (
                   <div className="flex flex-col items-center gap-4 p-10 text-center">
                     <div className="surface-raised rounded-2xl p-5">
@@ -1304,7 +1583,7 @@ export function EmailsPage() {
                       </p>
                     </div>
                     <Button asChild>
-                      <a href={buildAttachmentUrl(detail._id, selectedAttachment.attachmentId, true)}>
+                      <a href={buildAttachmentUrl(attachmentOwnerId ?? detail._id, selectedAttachment.attachmentId, true)}>
                         <DownloadIcon className="mr-2 size-4" />
                         Download Attachment
                       </a>

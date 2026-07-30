@@ -86,7 +86,11 @@ async function aggregateForUser(
 
   if (pref.sections.emailVolume) {
     const [total, rfqDocs] = await Promise.all([
-      Email.countDocuments({ organizationId: orgId, date: { $gte: from, $lt: to } }),
+      Email.countDocuments({
+        organizationId: orgId,
+        direction: { $ne: "outbound" },
+        date: { $gte: from, $lt: to },
+      }),
       RFQ.aggregate([
         { $match: { organizationId: orgId, createdAt: { $gte: from, $lt: to } } },
         {

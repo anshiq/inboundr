@@ -58,6 +58,7 @@ export async function getStatsOverview(req: Request, res: Response): Promise<voi
 
     const emailMatch: Record<string, unknown> = {
       organizationId,
+      direction: { $ne: "outbound" },
       date: { $gte: from, $lt: to },
     };
     const rfqMatch: Record<string, unknown> = {
