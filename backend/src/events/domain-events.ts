@@ -10,6 +10,18 @@ export interface FormDomainEventPayload {
   organizationId: string;
 }
 
+export interface EmailReplySentPayload {
+  emailId: string;
+  inReplyToEmailId: string | null;
+  threadId: string | null;
+  kind: "reply" | "reply_all" | "forward";
+  to: string;
+  subject: string;
+  gmailMessageId: string;
+  organizationId: string;
+  userId: string;
+}
+
 export interface DomainEventMap {
   "admin.notification_sample.requested": {
     organizationId: string;
@@ -25,6 +37,7 @@ export interface DomainEventMap {
   "rfq.quote_sent": RFQDomainEventPayload;
   "rfq.archived": RFQDomainEventPayload;
   "form.submitted": FormDomainEventPayload;
+  "email.reply_sent": EmailReplySentPayload;
 }
 
 type DomainEventName = keyof DomainEventMap;

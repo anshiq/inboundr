@@ -14,6 +14,7 @@ export const parsedEmailSchema = z.object({
   rfcMessageId: z.string().nullable(),
   references: z.string().nullable(),
   inReplyTo: z.string().nullable(),
+  replyTo: z.string().nullable(),
   from: z.string(),
   to: z.string(),
   cc: z.string().nullable(),

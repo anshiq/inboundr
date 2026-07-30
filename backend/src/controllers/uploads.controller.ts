@@ -19,6 +19,9 @@ import { createPresignedUpload, createPresignedViewUrl, keyBelongsToPrefix } fro
 import {
   BRANDING_ALLOWED_MIME_TYPES,
   BRANDING_MAX_FILE_SIZE,
+  EMAIL_ATTACHMENT_ALLOWED_MIME_TYPES,
+  EMAIL_ATTACHMENT_MAX_FILE_SIZE,
+  isBlockedAttachmentFilename,
 } from "../config/upload-constraints.config";
 
 const DEFAULT_ALLOWED_MIME_TYPES = [
@@ -42,7 +45,7 @@ const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 const AVATAR_ALLOWED_MIME_TYPES = ["image/webp", "image/jpeg", "image/png"];
 const AVATAR_MAX_FILE_SIZE = 2 * 1024 * 1024;
 const IMAGE_UPLOAD_SCOPES = ["branding", "letterhead", "employee", "attendance"] as const;
-const AUTHENTICATED_UPLOAD_SCOPES = ["form", "customer", "quote", "product", "support", "branding", "letterhead", "employee", "attendance", "asset"] as const;
+const AUTHENTICATED_UPLOAD_SCOPES = ["form", "customer", "quote", "product", "support", "branding", "letterhead", "employee", "attendance", "asset", "email"] as const;
 
 function normalizeUploadRequest(body: Record<string, unknown>) {
   return {
@@ -68,7 +71,14 @@ function validateUploadBasics(input: ReturnType<typeof normalizeUploadRequest>, 
 function allowedMimeTypesForScope(scope: string): string[] {
   if (scope === "employee" || scope === "attendance") return AVATAR_ALLOWED_MIME_TYPES;
   if (scope === "support") return SUPPORT_ALLOWED_MIME_TYPES;
+  if (scope === "email") return [...EMAIL_ATTACHMENT_ALLOWED_MIME_TYPES];
   return IMAGE_UPLOAD_SCOPES.includes(scope as any) ? [...BRANDING_ALLOWED_MIME_TYPES] : DEFAULT_ALLOWED_MIME_TYPES;
+}
+
+function maxFileSizeForScope(scope: string): number {
+  if (IMAGE_UPLOAD_SCOPES.includes(scope as any)) return BRANDING_MAX_FILE_SIZE;
+  if (scope === "email") return EMAIL_ATTACHMENT_MAX_FILE_SIZE;
+  return DEFAULT_MAX_FILE_SIZE;
 }
 
 function validateFeedbackUpload(input: ReturnType<typeof normalizeUploadRequest>): string | null {
@@ -187,10 +197,15 @@ export async function createAuthenticatedPresign(req: Request, res: Response): P
     const validationError = validateUploadBasics(
       input,
       allowedMimeTypesForScope(input.scope),
-      IMAGE_UPLOAD_SCOPES.includes(input.scope as any) ? BRANDING_MAX_FILE_SIZE : DEFAULT_MAX_FILE_SIZE
+      maxFileSizeForScope(input.scope)
     );
     if (validationError) {
       res.status(400).json({ error: validationError });
+      return;
+    }
+
+    if (input.scope === "email" && isBlockedAttachmentFilename(input.fileName)) {
+      res.status(400).json({ error: "This file type cannot be sent by email" });
       return;
     }
 
@@ -203,6 +218,8 @@ export async function createAuthenticatedPresign(req: Request, res: Response): P
             ? ["photos"]
             : input.scope === "attendance"
               ? ["evidence"]
+              : input.scope === "email"
+                ? ["outbox"]
           : [];
     const presigned = await createPresignedUpload({
       scope: input.scope,
