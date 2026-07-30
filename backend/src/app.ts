@@ -69,6 +69,7 @@ import { startDigestCron } from "./jobs/digest-cron";
 import { startPaymentReminderCron } from "./jobs/payment-reminder-cron";
 import { startRecruitmentRankingWorker } from "./services/recruitment-ranking.service";
 import { startRecruitmentAcknowledgementWorker } from "./services/recruitment-acknowledgement.service";
+import { backfillRFQThreadIds } from "./services/rfq.service";
 
 const app: Application = express();
 
@@ -175,6 +176,10 @@ export async function initializeServices(): Promise<void> {
     console.error("Failed to initialize Gmail watcher:", err);
     console.warn("Server will continue without Gmail watch — set up GCP credentials and retry");
   }
+
+  backfillRFQThreadIds().catch((err) =>
+    console.error("RFQ threadId backfill failed:", err)
+  );
 
   startDigestCron();
   startPaymentReminderCron();

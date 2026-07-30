@@ -887,7 +887,8 @@ export const retryRFQ = async (
       email.messageId,
       authReq.user.id,
       email.gmailAccountId.toString(),
-      organization._id.toString()
+      organization._id.toString(),
+      { threadId: email.threadId ?? null }
     ).catch(
       (err) => console.error(`RFQ retry failed for ${email.messageId}:`, err)
     );

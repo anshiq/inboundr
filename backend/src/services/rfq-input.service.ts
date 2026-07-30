@@ -42,6 +42,38 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+type ThreadEmailForRFQInput = Pick<
+  IEmail,
+  "from" | "to" | "date" | "direction" | "bodyText" | "bodyHtml"
+>;
+
+/**
+ * Builds the extraction input for a reply on a thread that already has an RFQ:
+ * the whole stored conversation, oldest first, with the freshly built input for
+ * the new message (which already includes its attachment text) at the end.
+ */
+export function buildRFQThreadConversationInput(
+  priorEmails: ThreadEmailForRFQInput[],
+  latestMessageInput: string
+): string {
+  const sections = [
+    "EMAIL CONVERSATION (oldest message first). The customer's request may change across messages, so extract the latest agreed state of the requested products, quantities and details. Messages labelled OUR REPLY were sent by our own team and are not the customer.",
+  ];
+
+  priorEmails.forEach((email, index) => {
+    const role = email.direction === "outbound" ? "OUR REPLY" : "FROM CUSTOMER";
+    const body =
+      email.bodyText || (email.bodyHtml ? stripHtml(email.bodyHtml) : "");
+    sections.push(
+      `MESSAGE ${index + 1} (${role})\nSENT FROM: ${email.from}, SENT TO: ${email.to}, DATE: ${email.date}\n${body || "(no body)"}`
+    );
+  });
+
+  sections.push(`LATEST MESSAGE (FROM CUSTOMER)\n${latestMessageInput}`);
+
+  return sections.join("\n\n---\n\n");
+}
+
 export function hasRFQProcessableContent(email: EmailForRFQInput): boolean {
   return Boolean(
     email.bodyText ||
