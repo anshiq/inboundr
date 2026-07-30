@@ -18,7 +18,7 @@ import { streamEmailPdf } from "../services/email-pdf.service";
 import { resolveOrganizationPdfBranding } from "../services/organization-pdf-branding.service";
 import { buildRFQProcessingInput, hasRFQProcessableContent } from "../services/rfq-input.service";
 import { processEmailForRFQ } from "../services/rfq.service";
-import { sendComposedMessage } from "../services/gmail-send.service";
+import { buildReferences, sendComposedMessage } from "../services/gmail-send.service";
 import {
   AttachmentError,
   buildForwardedBody,
@@ -823,12 +823,6 @@ export const sendEmailDraft = async (req: Request, res: Response): Promise<void>
     await draft.save();
 
     const isThreadedReply = kind !== "forward" && Boolean(parent);
-    const references = parent
-      ? [parent.references, parent.inReplyTo, parent.rfcMessageId]
-          .filter(Boolean)
-          .join(" ")
-          .trim() || undefined
-      : undefined;
 
     const sentMessageId = await sendComposedMessage({
       account,
@@ -840,7 +834,7 @@ export const sendEmailDraft = async (req: Request, res: Response): Promise<void>
         Bcc: draft.bcc ?? undefined,
         Subject: draft.subject || "(no subject)",
         "In-Reply-To": isThreadedReply ? parent!.rfcMessageId ?? undefined : undefined,
-        References: isThreadedReply ? references : undefined,
+        References: isThreadedReply ? buildReferences(parent!) : undefined,
       },
       html,
       attachments,
