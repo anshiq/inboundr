@@ -253,6 +253,29 @@ export async function syncThread(
   return created;
 }
 
+/**
+ * Archiving in Gmail means dropping the INBOX label. The local rows are updated
+ * to match so the inbox list, which filters on that label, reflects the change
+ * without waiting for the next watcher pass.
+ */
+export async function archiveThread(
+  account: IGmailAccount,
+  threadId: string
+): Promise<void> {
+  const gmail = await getGmailClientForAccount(account);
+
+  await gmail.users.threads.modify({
+    userId: "me",
+    id: threadId,
+    requestBody: { removeLabelIds: ["INBOX"] },
+  });
+
+  await Email.updateMany(
+    { gmailAccountId: account._id, threadId },
+    { $pull: { labels: "INBOX" } }
+  );
+}
+
 interface PayloadParseResult {
   bodyText: string | null;
   bodyHtml: string | null;

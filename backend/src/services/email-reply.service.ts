@@ -27,31 +27,47 @@ export function extractAddress(value: string | null | undefined): string {
 /**
  * Reply targets Reply-To when the sender set one; mailing lists and ticketing
  * systems rely on it, and replying to From would reach the wrong inbox.
+ *
+ * When the anchor is one of our own sent messages, From and Reply-To are both
+ * the account itself, so replying to them would address the user. Gmail instead
+ * reuses the recipients of that message, which is what an outbound anchor does
+ * here.
  */
 export function deriveRecipients(
-  email: Pick<IEmail, "from" | "to" | "cc" | "replyTo" | "subject">,
+  email: Pick<IEmail, "from" | "to" | "cc" | "replyTo" | "subject" | "direction">,
   kind: EmailKind,
   accountAddress: string
 ): DerivedRecipients {
   if (kind === "forward") return { to: "", cc: null };
 
-  const primary = (email.replyTo || email.from || "").trim();
+  const isOutbound = email.direction === "outbound";
+  const recipients = splitAddressList(email.to ?? "");
+
+  // An outbound anchor has no meaningful sender to reply to, so the people it
+  // was addressed to become the primary recipients.
+  const primary = isOutbound
+    ? recipients.join(", ")
+    : (email.replyTo || email.from || "").trim();
+
   if (kind === "reply") return { to: primary, cc: null };
 
   const excluded = new Set(
-    [accountAddress, extractAddress(primary), extractAddress(email.from)]
+    [accountAddress, extractAddress(primary), isOutbound ? "" : extractAddress(email.from)]
       .map((address) => address.toLowerCase())
       .filter(Boolean)
   );
+
+  // Outbound To addresses are already the primary recipients, so only Cc is
+  // left to carry over.
+  const carried = isOutbound
+    ? splitAddressList(email.cc ?? "")
+    : [...recipients, ...splitAddressList(email.cc ?? "")];
 
   const seen = new Set<string>();
   const cc: string[] = [];
 
   // Bcc is deliberately never carried over: those recipients were hidden.
-  for (const candidate of [
-    ...splitAddressList(email.to ?? ""),
-    ...splitAddressList(email.cc ?? ""),
-  ]) {
+  for (const candidate of carried) {
     const address = extractAddress(candidate);
     if (!address || excluded.has(address) || seen.has(address)) continue;
     seen.add(address);
@@ -59,6 +75,17 @@ export function deriveRecipients(
   }
 
   return { to: primary, cc: cc.length > 0 ? cc.join(", ") : null };
+}
+
+/**
+ * Reply-all is only meaningfully different from reply when it would actually
+ * add someone, so the UI can hide the control instead of offering a duplicate.
+ */
+export function canReplyAll(
+  email: Pick<IEmail, "from" | "to" | "cc" | "replyTo" | "subject" | "direction">,
+  accountAddress: string
+): boolean {
+  return deriveRecipients(email, "reply_all", accountAddress).cc !== null;
 }
 
 export function normalizeSubject(subject: string, kind: EmailKind): string {
@@ -142,6 +169,8 @@ function sanitizeQuotedHtml(html: string): string {
   return sanitizeHtml(html, QUOTE_SANITIZE_OPTIONS);
 }
 
+const COLOR_VALUE_RE = /^(?:#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})|rgba?\([\d\s.,%]+\)|[a-z]+)$/i;
+
 /**
  * The composer body arrives over HTTP, so the editor's own schema is not a
  * security boundary. Restrict it to what the TipTap toolbar can actually emit.
@@ -160,8 +189,21 @@ export function sanitizeComposedHtml(html: string): string {
       td: ["colspan", "rowspan", "style"],
       th: ["colspan", "rowspan", "style"],
     },
+    // Narrowed to the declarations the composer toolbar produces. `style` is
+    // allowed broadly above, so without this it would pass through anything.
+    allowedStyles: {
+      "*": {
+        "font-family": [/^[\w\s"',-]+$/],
+        "font-size": [/^\d{1,3}(?:\.\d+)?(?:px|pt|em|rem)$/],
+        color: [COLOR_VALUE_RE],
+        "background-color": [COLOR_VALUE_RE],
+        "text-align": [/^(?:left|right|center|justify)$/],
+      },
+    },
     allowedSchemes: ["http", "https", "mailto", "tel"],
-    allowedSchemesByTag: { img: ["http", "https", "cid", "data"] },
+    // The editor is configured with allowBase64: false, so a data URI here could
+    // only come from a hand-rolled request, and would bloat every stored draft.
+    allowedSchemesByTag: { img: ["http", "https"] },
     transformTags: {
       a: sanitizeHtml.simpleTransform("a", { target: "_blank", rel: "noopener noreferrer" }),
     },
@@ -321,8 +363,23 @@ export async function persistOutboundEmail({
     console.error(`Failed to read back sent Gmail message ${sentMessageId}:`, err);
   }
 
-  const updated = await Email.findByIdAndUpdate(draft._id, update, { new: true });
-  return updated ?? draft;
+  try {
+    const updated = await Email.findByIdAndUpdate(draft._id, update, { new: true });
+    return updated ?? draft;
+  } catch (err) {
+    // A thread sync running in the window between sending and this update will
+    // have ingested the message itself, so claiming the id here collides. Adopt
+    // the row it created rather than failing a send that already went out.
+    const existing = await Email.findOne({
+      gmailAccountId: account._id,
+      messageId: sentMessageId,
+      _id: { $ne: draft._id },
+    });
+    if (!existing) throw err;
+
+    await Email.deleteOne({ _id: draft._id });
+    return existing;
+  }
 }
 
 /**

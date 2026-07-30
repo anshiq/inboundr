@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { Email } from "../models/email.model";
 
 export async function connectDB(): Promise<void> {
   const uri = process.env.MONGODB_URI;
@@ -24,12 +25,21 @@ export async function connectDB(): Promise<void> {
 }
 
 /**
- * The `emails` collection used to carry a plain unique index on
- * { gmailAccountId, messageId }. Outbound drafts have no messageId, so under the
- * old index a second draft on the same account collides on null. Mongoose will
- * not replace an index whose options changed, so drop the stale one and let it
- * be rebuilt as the partial index declared on the schema.
+ * Outbound drafts carry no messageId until Gmail assigns one, and a unique index
+ * counts every one of those as null, so only the first draft can ever be stored.
+ * Two such indexes predate the draft feature and neither is declared on the
+ * schema any more, so Mongoose leaves both in place:
+ *
+ * - `messageId_1`, unique on messageId alone.
+ * - `gmailAccountId_1_messageId_1` in its original non-partial form, since
+ *   Mongoose will not rebuild an index whose options changed.
+ *
+ * Dropping them lets the partial index the schema now declares take over. This is
+ * deliberately targeted rather than a `syncIndexes()` call, which would also drop
+ * unrelated indexes that are merely undeclared.
  */
+const STALE_EMAIL_INDEXES = ["messageId_1", "gmailAccountId_1_messageId_1"];
+
 async function reconcileEmailIndexes(): Promise<void> {
   const db = mongoose.connection.db;
   if (!db) return;
@@ -38,17 +48,30 @@ async function reconcileEmailIndexes(): Promise<void> {
     const collections = await db.listCollections({ name: "emails" }).toArray();
     if (collections.length === 0) return;
 
-    const indexes = await db.collection("emails").indexes();
-    const stale = indexes.find(
+    const emails = db.collection("emails");
+    const indexes = await emails.indexes();
+
+    const stale = indexes.filter(
       (index) =>
-        index.name === "gmailAccountId_1_messageId_1" &&
+        index.name !== undefined &&
+        STALE_EMAIL_INDEXES.includes(index.name) &&
         index.unique === true &&
+        // The replacement carries a partial filter, so leave that one alone.
         !index.partialFilterExpression
     );
-    if (!stale) return;
+    if (stale.length === 0) return;
 
-    await db.collection("emails").dropIndex("gmailAccountId_1_messageId_1");
-    console.log("Dropped stale unique index emails.gmailAccountId_1_messageId_1");
+    for (const index of stale) {
+      await emails.dropIndex(index.name!);
+      console.log(`Dropped stale unique index emails.${index.name}`);
+    }
+
+    // Mongoose queues its own index build as soon as the connection opens, so it
+    // may already have raced these drops and aborted with IndexOptionsConflict.
+    // Rebuild explicitly instead of depending on which one won, otherwise the
+    // partial index is silently missing and the second draft collides on null.
+    await Email.init().catch(() => undefined);
+    await Email.createIndexes();
   } catch (err) {
     console.error("Failed to reconcile email indexes:", err);
   }

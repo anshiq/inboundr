@@ -1,6 +1,16 @@
 import type { Request, Response } from "express";
-import { getAttachment, processHistoryUpdate, syncThread } from "../services/email.service";
-import { Email, type EmailKind, type IEmail } from "../models/email.model";
+import {
+  archiveThread,
+  getAttachment,
+  processHistoryUpdate,
+  syncThread,
+} from "../services/email.service";
+import {
+  Email,
+  type EmailDirection,
+  type EmailKind,
+  type IEmail,
+} from "../models/email.model";
 import { GmailAccount, type IGmailAccount } from "../models/gmail-account.model";
 import { RFQ } from "../models/rfq.model";
 import type { AuthenticatedRequest, OrganizationRequest } from "../middleware/auth.middleware";
@@ -13,6 +23,7 @@ import {
   AttachmentError,
   buildForwardedBody,
   buildQuotedOriginal,
+  canReplyAll,
   deriveRecipients,
   normalizeSubject,
   persistOutboundEmail,
@@ -25,6 +36,7 @@ import {
   isBlockedAttachmentFilename,
 } from "../config/upload-constraints.config";
 import { emitDomainEvent } from "../events/domain-events";
+import { GMAIL_SEND_SCOPE } from "../config/gmail.config";
 
 const INLINE_ATTACHMENT_MIME_TYPES = new Set([
   "application/pdf",
@@ -118,12 +130,18 @@ export const listEmails = async (
     const skip = (page - 1) * limit;
 
     // Legacy rows predate `direction`, so $ne matches them as inbound. The INBOX
-    // label keeps thread-synced messages the user archived in Gmail out of the list.
+    // label keeps messages the user archived in Gmail out of the list, but rows
+    // ingested before labels were recorded have none, and requiring the label
+    // outright would hide them.
     const listFilter = {
       userId: authReq.user.id,
       organizationId: organization._id,
       direction: { $ne: "outbound" as const },
-      labels: "INBOX",
+      $or: [
+        { labels: "INBOX" },
+        { labels: { $size: 0 } },
+        { labels: { $exists: false } },
+      ],
     };
 
     const [emails, total] = await Promise.all([
@@ -394,12 +412,23 @@ function requestScope(req: Request): RequestScope {
   };
 }
 
-function serializeMessage(email: IEmail | Record<string, any>) {
+/**
+ * Rows that predate the direction field have no such key, and lean() reads skip
+ * schema defaults, so an absent value is resolved to inbound here. Doing it at
+ * the boundary keeps every consumer from having to treat undefined as inbound.
+ */
+function serializeMessage(email: IEmail | Record<string, any>, accountAddress?: string) {
   const doc = "toObject" in email ? (email as IEmail).toObject() : email;
   const { pendingAttachments, ...rest } = doc as Record<string, any>;
+  const direction: EmailDirection = rest.direction === "outbound" ? "outbound" : "inbound";
+
   return {
     ...rest,
+    direction,
     pendingAttachments: pendingAttachments ?? [],
+    canReplyAll: accountAddress
+      ? canReplyAll({ ...(rest as IEmail), direction }, accountAddress)
+      : false,
   };
 }
 
@@ -433,22 +462,35 @@ async function loadThreadMessages(email: IEmail, scope: RequestScope) {
  * the conversation.
  */
 async function loadThreadDrafts(parentIds: IEmail["_id"][], scope: RequestScope) {
-  return Email.find({
-    userId: scope.userId,
-    organizationId: scope.organizationId,
-    direction: "outbound",
-    inReplyToEmailId: { $in: parentIds },
-    sendStatus: { $in: ["draft", "failed"] },
-  })
+  const drafts = await Email.find(
+    editableDraftQuery({
+      userId: scope.userId,
+      organizationId: scope.organizationId,
+      inReplyToEmailId: { $in: parentIds },
+    })
+  )
     .sort({ updatedAt: 1 })
     .lean();
+
+  // The filter only admits `sending` rows already past the staleness cutoff, so
+  // any that come back are orphaned. Report them as failed to get the client's
+  // retry affordance rather than a spinner that never resolves.
+  return drafts.map((draft) =>
+    draft.sendStatus === "sending"
+      ? {
+          ...draft,
+          sendStatus: "failed" as const,
+          sendError: draft.sendError ?? "Sending was interrupted. Try again.",
+        }
+      : draft
+  );
 }
 
 async function respondWithThread(
   res: Response,
   email: IEmail,
   scope: RequestScope,
-  extra: Record<string, unknown> = {}
+  options: { account?: IGmailAccount | null; extra?: Record<string, unknown> } = {}
 ): Promise<void> {
   const messages = await loadThreadMessages(email, scope);
   const drafts = await loadThreadDrafts(
@@ -456,11 +498,17 @@ async function respondWithThread(
     scope
   );
 
+  // Reply-all availability depends on the account's own address, so it can only
+  // be resolved here rather than in the client.
+  const account = options.account ?? (await loadAccountFor(email, scope));
+  const accountAddress = account?.emailAddress;
+
   res.json({
     threadId: email.threadId,
-    messages: messages.map(serializeMessage),
-    drafts: drafts.map(serializeMessage),
-    ...extra,
+    accountAddress: accountAddress ?? null,
+    messages: messages.map((message) => serializeMessage(message, accountAddress)),
+    drafts: drafts.map((draft) => serializeMessage(draft)),
+    ...options.extra,
   });
 }
 
@@ -503,7 +551,7 @@ export const syncEmailThread = async (req: Request, res: Response): Promise<void
       console.error(`Failed to sync Gmail thread ${email.threadId}:`, err);
     }
 
-    await respondWithThread(res, email, scope, { created });
+    await respondWithThread(res, email, scope, { account, extra: { created } });
   } catch (err) {
     console.error("Error syncing email thread:", err);
     res.status(500).json({ error: "Failed to sync thread" });
@@ -618,13 +666,30 @@ export const createEmailDraft = async (req: Request, res: Response): Promise<voi
   }
 };
 
+/**
+ * A send flips the row to `sending` before calling Gmail. If the process dies in
+ * between, nothing ever moves it on, and a row in that state is matched by no
+ * endpoint, so the user loses the reply with no way to reach it. Past this age
+ * the row is treated as orphaned and becomes editable again.
+ */
+const STALE_SENDING_AFTER_MS = 2 * 60 * 1000;
+
+function editableDraftQuery<T extends object>(base: T) {
+  return {
+    ...base,
+    direction: "outbound" as const,
+    $or: [
+      { sendStatus: { $in: ["draft", "failed"] as const } },
+      {
+        sendStatus: "sending" as const,
+        updatedAt: { $lt: new Date(Date.now() - STALE_SENDING_AFTER_MS) },
+      },
+    ],
+  };
+}
+
 async function loadDraft(req: Request, scope: RequestScope): Promise<IEmail | null> {
-  return Email.findOne({
-    _id: req.params.draftId,
-    ...scope,
-    direction: "outbound",
-    sendStatus: { $in: ["draft", "failed"] },
-  });
+  return Email.findOne(editableDraftQuery({ _id: req.params.draftId, ...scope }));
 }
 
 export const updateEmailDraft = async (req: Request, res: Response): Promise<void> => {
@@ -672,6 +737,9 @@ export const deleteEmailDraft = async (req: Request, res: Response): Promise<voi
 export const sendEmailDraft = async (req: Request, res: Response): Promise<void> => {
   const scope = requestScope(req);
   let draft: IEmail | null = null;
+  // Tracks whether Gmail accepted the message, so a later failure is never
+  // reported as a retryable send.
+  let deliveredMessageId: string | null = null;
 
   try {
     draft = await loadDraft(req, scope);
@@ -708,6 +776,15 @@ export const sendEmailDraft = async (req: Request, res: Response): Promise<void>
     const account = await loadAccountFor(draft, scope);
     if (!account) {
       res.status(404).json({ error: "Gmail account not found" });
+      return;
+    }
+
+    // Accounts linked before sending was supported hold only the readonly scope.
+    // Gmail answers those with a bare 403, so name the remedy up front.
+    if (!account.scope.includes(GMAIL_SEND_SCOPE)) {
+      res.status(403).json({
+        error: `${account.emailAddress} was connected without permission to send mail. Reconnect the account in Settings to grant it.`,
+      });
       return;
     }
 
@@ -772,8 +849,21 @@ export const sendEmailDraft = async (req: Request, res: Response): Promise<void>
     if (!sentMessageId) {
       throw new Error("Gmail did not return a message id");
     }
+    deliveredMessageId = sentMessageId;
 
     const sent = await persistOutboundEmail({ account, draft, sentMessageId });
+
+    // The message is already away, so a failure to archive must not fail the
+    // request; report it alongside the sent message instead.
+    let archiveError: string | null = null;
+    if (req.body?.archive === true && parent?.threadId) {
+      try {
+        await archiveThread(account, parent.threadId);
+      } catch (err) {
+        console.error(`Failed to archive thread ${parent.threadId}:`, err);
+        archiveError = err instanceof Error ? err.message : "Failed to archive the conversation";
+      }
+    }
 
     void emitDomainEvent("email.reply_sent", {
       emailId: sent._id.toString(),
@@ -787,9 +877,27 @@ export const sendEmailDraft = async (req: Request, res: Response): Promise<void>
       userId: scope.userId,
     });
 
-    res.json(serializeMessage(sent));
+    // The sent message becomes the thread's newest, so the client needs to know
+    // whether replying-all to it would still add anyone.
+    res.json({ ...serializeMessage(sent, account.emailAddress), archiveError });
   } catch (err) {
     console.error("Error sending email draft:", err);
+
+    // Once Gmail has the message, marking the draft failed would invite a retry
+    // that delivers it a second time. Record it as sent instead and let the
+    // bookkeeping problem surface on its own.
+    if (draft && deliveredMessageId) {
+      await Email.updateOne(
+        { _id: draft._id },
+        { sendStatus: "sent", sendError: null, pendingAttachments: [] }
+      ).catch(() => undefined);
+
+      res.status(500).json({
+        error:
+          "The message was sent, but recording it failed. Refresh the conversation before replying again so it is not sent twice.",
+      });
+      return;
+    }
 
     if (draft) {
       draft.sendStatus = "failed";

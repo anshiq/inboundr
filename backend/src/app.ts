@@ -92,6 +92,9 @@ app.all("/api/auth/*splat", toNodeHandler(auth));
 app.use("/api/v1/telephony", telephonyRouter);
 
 app.use("/api/v1/products/import", express.json({ limit: "1mb" }));
+// Composed replies carry an HTML body, a quoted chain and possibly inline
+// images, which the default 100kb limit rejects with an opaque 413.
+app.use("/api/v1/email", express.json({ limit: "10mb" }));
 app.use(express.json());
 
 app.get("/health", (req: Request, res: Response) => {
