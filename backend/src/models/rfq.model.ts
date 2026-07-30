@@ -86,6 +86,8 @@ export interface IRFQ extends Document {
   organizationId: Types.ObjectId;
   gmailAccountId: Types.ObjectId;
   emailId: Types.ObjectId;
+  threadId: string | null;
+  latestEmailId: Types.ObjectId | null;
   isRFQ: boolean;
   reason: string;
   isProcessed: boolean;
@@ -227,6 +229,15 @@ const rfqSchema = new Schema<IRFQ>(
       required: true,
       unique: true,
     },
+    // Gmail conversation id of the source email, so replies on the same
+    // thread can find and update this RFQ instead of spawning a new one.
+    threadId: { type: String, default: null },
+    // Most recent thread message that refreshed the extracted data.
+    latestEmailId: {
+      type: Schema.Types.ObjectId,
+      ref: "Email",
+      default: null,
+    },
     isRFQ: { type: Boolean, required: true },
     reason: { type: String, required: true },
     isProcessed: { type: Boolean, default: false },
@@ -276,6 +287,7 @@ const rfqSchema = new Schema<IRFQ>(
   { timestamps: true }
 );
 
+rfqSchema.index({ gmailAccountId: 1, threadId: 1 });
 rfqSchema.index({ userId: 1, isRFQ: 1, createdAt: -1 });
 rfqSchema.index({ organizationId: 1, isRFQ: 1, createdAt: -1 });
 rfqSchema.index({ organizationId: 1, workflowStatus: 1, draftSavedAt: -1 });

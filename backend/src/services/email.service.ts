@@ -127,7 +127,8 @@ export async function processHistoryUpdate(
               messageId,
               account.userId,
               account._id.toString(),
-              account.organizationId?.toString()
+              account.organizationId?.toString(),
+              { threadId: emailDoc.threadId ?? null }
             ).catch((err) =>
               console.error(`RFQ processing failed for ${messageId}:`, err)
             );
@@ -459,7 +460,8 @@ async function fetchRecentMessages(account: IGmailAccount): Promise<void> {
             msg.id,
             account.userId,
             account._id.toString(),
-            account.organizationId?.toString()
+            account.organizationId?.toString(),
+            { threadId: emailDoc.threadId ?? null }
           ).catch((err) =>
             console.error(`RFQ processing failed for ${msg.id}:`, err)
           );

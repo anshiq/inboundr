@@ -128,6 +128,7 @@ const identifyCustomer: GraphNode<typeof State> = async (state) => {
        ${state.organizationContext.description ?? ""}
 
         You are given a email from a potential customer asking for a quote for the products they are interested in.
+        The input may also be a whole email conversation; messages labelled OUR REPLY are from our own team, so identify the external customer, never our own team.
         Your task is to identify the customer from the email and return the customer details in the structured output format.`
     ),
     new HumanMessage(state.emailBody),
@@ -183,6 +184,8 @@ const identifyProducts: GraphNode<typeof State> = async (state) => {
        ${state.organizationContext.description ? `${state.organizationContext.description}` : ""}
 
        You are given a email from a potential customer asking for a quote for the products they are interested in.
+       The input may also be a whole email conversation; extract the customer's latest agreed request, letting
+       later messages override earlier quantities and details (e.g. a quantity confirmed in a follow-up reply).
        Your task is to identify the products from the email and return the products details in the structured output format.
        
        Extract each requested catalog item separately. Preserve an exact SKU/model/part number,

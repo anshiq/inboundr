@@ -68,6 +68,7 @@ interface EmailSummary {
   isRFQ: boolean | null
   classificationReason: string | null
   rfqErrorMessage: string | null
+  threadCount?: number
 }
 
 type EmailAttachment = EmailSummary["attachments"][number]
@@ -1174,6 +1175,11 @@ export function EmailsPage() {
                                 {name}
                               </span>
                             </SenderHoverCard>
+                            {(email.threadCount ?? 1) > 1 && (
+                              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground/60">
+                                {email.threadCount}
+                              </span>
+                            )}
                           </div>
                           <Tooltip>
                             <TooltipTrigger asChild>

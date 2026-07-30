@@ -144,26 +144,92 @@ export const listEmails = async (
       ],
     };
 
-    const [emails, total] = await Promise.all([
-      Email.find()
-        .where(listFilter)
-        .select("-bodyText -bodyHtml")
-        .sort({ date: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Email.countDocuments(listFilter),
+    // One row per Gmail conversation: the newest inbound message represents
+    // the thread. Legacy rows without a threadId stay as standalone rows.
+    const threadKeyExpr = {
+      account: "$gmailAccountId",
+      thread: { $ifNull: ["$threadId", { $toString: "$_id" }] },
+    };
+
+    const [emails, totalRows] = await Promise.all([
+      Email.aggregate([
+        { $match: listFilter },
+        { $sort: { date: -1, _id: -1 } },
+        { $group: { _id: threadKeyExpr, doc: { $first: "$$ROOT" } } },
+        { $sort: { "doc.date": -1, "doc._id": -1 } },
+        { $skip: skip },
+        { $limit: limit },
+        { $replaceRoot: { newRoot: "$doc" } },
+        { $unset: ["bodyText", "bodyHtml"] },
+      ]),
+      Email.aggregate([
+        { $match: listFilter },
+        { $group: { _id: threadKeyExpr } },
+        { $count: "total" },
+      ]),
     ]);
+    const total: number = totalRows[0]?.total ?? 0;
+
+    // Conversation size counts every stored message in the thread (both
+    // directions), matching what the thread view will show when opened.
+    const threadPairs = emails
+      .filter((email) => email.threadId)
+      .map((email) => ({
+        gmailAccountId: email.gmailAccountId,
+        threadId: email.threadId,
+      }));
+    const threadCountByKey = new Map<string, number>();
+    if (threadPairs.length > 0) {
+      const counts = await Email.aggregate([
+        {
+          $match: {
+            userId: authReq.user.id,
+            organizationId: organization._id,
+            $or: threadPairs,
+            messageId: { $type: "string" },
+          },
+        },
+        {
+          $group: {
+            _id: { account: "$gmailAccountId", thread: "$threadId" },
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+      for (const row of counts) {
+        threadCountByKey.set(`${row._id.account}:${row._id.thread}`, row.count);
+      }
+    }
 
     const emailIds = emails.map((email) => email._id);
+    const threadIds = [...new Set(emails.map((email) => email.threadId).filter(Boolean))];
     const rfqs = await RFQ.find({
       userId: authReq.user.id,
       organizationId: organization._id,
-      emailId: { $in: emailIds },
+      $or: [
+        { emailId: { $in: emailIds } },
+        ...(threadIds.length > 0 ? [{ threadId: { $in: threadIds } }] : []),
+      ],
     })
-      .select("emailId isRFQ reason errorMessage")
+      .select("emailId threadId gmailAccountId isRFQ reason errorMessage")
       .lean();
     const rfqByEmailId = new Map(rfqs.map((rfq) => [rfq.emailId.toString(), rfq]));
+    // Thread fallback prefers a positive classification, so a stray "not RFQ"
+    // row for a follow-up never masks the thread's real RFQ.
+    const rfqByThreadKey = new Map<string, (typeof rfqs)[number]>();
+    for (const rfq of rfqs) {
+      if (!rfq.threadId) continue;
+      const key = `${rfq.gmailAccountId}:${rfq.threadId}`;
+      const current = rfqByThreadKey.get(key);
+      if (!current || (rfq.isRFQ && !current.isRFQ)) {
+        rfqByThreadKey.set(key, rfq);
+      }
+    }
+    const resolveRFQ = (email: any) =>
+      rfqByEmailId.get(email._id.toString()) ??
+      (email.threadId
+        ? rfqByThreadKey.get(`${email.gmailAccountId}:${email.threadId}`)
+        : undefined);
     const accountIds = [...new Set(emails.map((email) => email.gmailAccountId?.toString()).filter(Boolean))];
     const accounts = await GmailAccount.find({
       _id: { $in: accountIds },
@@ -177,13 +243,16 @@ export const listEmails = async (
     );
 
     res.json({
-      emails: emails.map((email) =>
-        attachClassification(
+      emails: emails.map((email) => ({
+        ...attachClassification(
           email,
-          rfqByEmailId.get(email._id.toString()),
+          resolveRFQ(email),
           accountEmailById.get(email.gmailAccountId.toString()) ?? null
-        )
-      ),
+        ),
+        threadCount: email.threadId
+          ? threadCountByKey.get(`${email.gmailAccountId}:${email.threadId}`) ?? 1
+          : 1,
+      })),
       total,
       page,
       limit,
@@ -211,13 +280,25 @@ export const getEmail = async (
       res.status(404).json({ error: "Email not found" });
       return;
     }
-    const rfq = await RFQ.findOne({
+    let rfq = await RFQ.findOne({
       emailId: email._id,
       userId: authReq.user.id,
       organizationId: organization._id,
     })
       .select("emailId isRFQ reason errorMessage")
       .lean();
+    // A reply carries no RFQ row of its own; surface the thread's RFQ instead.
+    if (!rfq && email.threadId) {
+      rfq = await RFQ.findOne({
+        userId: authReq.user.id,
+        organizationId: organization._id,
+        gmailAccountId: email.gmailAccountId,
+        threadId: email.threadId,
+      })
+        .sort({ isRFQ: -1, createdAt: -1 })
+        .select("emailId isRFQ reason errorMessage")
+        .lean();
+    }
     const account = await GmailAccount.findOne({
       _id: email.gmailAccountId,
       userId: authReq.user.id,
@@ -295,7 +376,8 @@ export const reprocessEmail = async (
       email.messageId,
       authReq.user.id,
       account._id.toString(),
-      organization._id.toString()
+      organization._id.toString(),
+      { threadId: email.threadId ?? null }
     ).catch((err) =>
       console.error(`RFQ reprocessing failed for ${email.messageId}:`, err)
     );
