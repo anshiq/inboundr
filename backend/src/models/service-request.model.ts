@@ -144,6 +144,8 @@ const serviceRequestSchema = new Schema<IServiceRequest>(
 serviceRequestSchema.index({ organizationId: 1, reference: 1 }, { unique: true });
 serviceRequestSchema.index({ organizationId: 1, systemCategory: 1, updatedAt: -1 });
 serviceRequestSchema.index({ organizationId: 1, customerId: 1, createdAt: -1 });
+// Request lists and exports sort by last activity.
+serviceRequestSchema.index({ organizationId: 1, lastActivityAt: -1 });
 serviceRequestSchema.index({ title: "text", description: "text", reference: "text" });
 
 export const ServiceRequest = mongoose.model<IServiceRequest>("ServiceRequest", serviceRequestSchema);

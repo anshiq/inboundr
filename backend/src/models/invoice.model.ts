@@ -287,6 +287,8 @@ invoiceSchema.pre("validate", function normalizeTemplateField() {
 
 invoiceSchema.index({ organizationId: 1, invoiceNumber: 1 }, { unique: true });
 invoiceSchema.index({ organizationId: 1, status: 1, dueDate: 1 });
+// Invoice lists sort by issue date.
+invoiceSchema.index({ organizationId: 1, issueDate: -1 });
 invoiceSchema.index({
   invoiceNumber: "text",
   "customerSnapshot.name": "text",
