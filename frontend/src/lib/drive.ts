@@ -185,7 +185,7 @@ export const EXTENSION_TO_MIME = {
   avi: "video/x-msvideo",
   mkv: "video/x-matroska",
   "3gp": "video/3gpp",
-  ts: "video/mp2t",
+  m2t: "video/mp2t",
 
   // Images
   png: "image/png",
@@ -263,7 +263,7 @@ export const EXTENSION_TO_MIME = {
 
   // Archives
   zip: "application/zip",
-} as const;
+} as const
 
 function extensionFallbackLabel(name: string) {
   const trimmed = name.trim()
