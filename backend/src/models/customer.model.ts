@@ -39,5 +39,7 @@ const customerSchema = new Schema<ICustomer>(
 customerSchema.index({ company: 1, email: 1 });
 customerSchema.index({ organizationId: 1, email: 1 });
 customerSchema.index({ organizationId: 1, company: 1 });
+// Customer lists sort by recency.
+customerSchema.index({ organizationId: 1, updatedAt: -1 });
 
 export const Customer = mongoose.model<ICustomer>("Customer", customerSchema);

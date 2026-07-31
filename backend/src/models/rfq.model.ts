@@ -291,5 +291,7 @@ rfqSchema.index({ gmailAccountId: 1, threadId: 1 });
 rfqSchema.index({ userId: 1, isRFQ: 1, createdAt: -1 });
 rfqSchema.index({ organizationId: 1, isRFQ: 1, createdAt: -1 });
 rfqSchema.index({ organizationId: 1, workflowStatus: 1, draftSavedAt: -1 });
+// RFQ list supports sorting by updatedAt as well as createdAt.
+rfqSchema.index({ userId: 1, isRFQ: 1, updatedAt: -1 });
 
 export const RFQ = mongoose.model<IRFQ>("RFQ", rfqSchema);

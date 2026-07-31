@@ -151,24 +151,43 @@ export const listEmails = async (
       thread: { $ifNull: ["$threadId", { $toString: "$_id" }] },
     };
 
-    const [emails, totalRows] = await Promise.all([
+    // Sorting/grouping full documents (with bodies) blows MongoDB's 32MB
+    // in-memory sort limit on large mailboxes, so the pipeline works on slim
+    // key tuples only and the page of full documents is fetched afterwards.
+    const [pageRows, totalRows] = await Promise.all([
       Email.aggregate([
         { $match: listFilter },
+        { $project: { date: 1, gmailAccountId: 1, threadId: 1 } },
         { $sort: { date: -1, _id: -1 } },
-        { $group: { _id: threadKeyExpr, doc: { $first: "$$ROOT" } } },
-        { $sort: { "doc.date": -1, "doc._id": -1 } },
+        {
+          $group: {
+            _id: threadKeyExpr,
+            emailId: { $first: "$_id" },
+            date: { $first: "$date" },
+          },
+        },
+        { $sort: { date: -1, emailId: -1 } },
         { $skip: skip },
         { $limit: limit },
-        { $replaceRoot: { newRoot: "$doc" } },
-        { $unset: ["bodyText", "bodyHtml"] },
-      ]),
+      ]).allowDiskUse(true),
       Email.aggregate([
         { $match: listFilter },
         { $group: { _id: threadKeyExpr } },
         { $count: "total" },
-      ]),
+      ]).allowDiskUse(true),
     ]);
     const total: number = totalRows[0]?.total ?? 0;
+
+    const pageEmailIds = pageRows.map((row) => row.emailId);
+    const pageDocs = await Email.find({ _id: { $in: pageEmailIds } })
+      .select("-bodyText -bodyHtml")
+      .lean();
+    const pageDocById = new Map(
+      pageDocs.map((doc) => [doc._id.toString(), doc])
+    );
+    const emails = pageEmailIds
+      .map((id) => pageDocById.get(id.toString()))
+      .filter((doc): doc is NonNullable<typeof doc> => Boolean(doc));
 
     // Conversation size counts every stored message in the thread (both
     // directions), matching what the thread view will show when opened.
