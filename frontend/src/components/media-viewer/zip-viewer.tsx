@@ -141,12 +141,7 @@ export default function ZipViewer({ url, name }: ZipViewerProps) {
     setDownloadingEntry(entry.path)
     try {
       const objUrl = await getEntryObjectUrl(entry)
-      const a = document.createElement("a")
-      a.href = objUrl
-      a.download = entry.name
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
+      downloadFile(objUrl, entry.name)
     } catch (err) {
       console.error("Error extracting file from ZIP:", err)
     } finally {
