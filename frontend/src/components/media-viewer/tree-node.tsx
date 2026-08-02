@@ -1,8 +1,7 @@
 import { memo } from "react"
 import { Download, Eye, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { FlatRow } from "./tree-utils"
-import { formatBytes, formatDate } from "./tree-utils"
+import { formatBytes, formatDate, type FlatRow } from "@/lib/drive"
 import { iconForFile, iconForFolder } from "./file-icons"
 
 interface TreeNodeRowProps {
