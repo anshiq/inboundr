@@ -131,6 +131,10 @@ function propsAreEqual(prev: TreeNodeRowProps, next: TreeNodeRowProps) {
     prev.row.depth === next.row.depth &&
     prev.isSelected === next.isSelected &&
     prev.isDownloading === next.isDownloading &&
+    prev.onToggleFolder === next.onToggleFolder &&
+    prev.onOpenFile === next.onOpenFile &&
+    prev.onDownloadFile === next.onDownloadFile &&
+    prev.onSelect === next.onSelect &&
     prev.style.transform === next.style.transform &&
     prev.style.height === next.style.height
   )
