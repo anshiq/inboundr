@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { ArchiveSummary, WorkerRequest, WorkerResponse, ZipTreeFolder } from "./zip-worker"
+import type { ArchiveSummary, WorkerRequest, WorkerResponse, ZipTreeFolder } from "@/lib/zip-worker"
 
 export type ParseStatus = "idle" | "loading" | "parsing" | "ready" | "error"
 
@@ -8,14 +8,10 @@ interface ParseProgress {
   total: number
 }
 
-// ── Small LRU cache for extracted object URLs ───────────────────────────────
-// Bounded at MAX_CACHED_BLOBS so a long browsing session across a huge
-// archive can't accumulate unbounded blob memory. Oldest-touched entry is
-// evicted first; touching (get) an entry refreshes its recency.
 const MAX_CACHED_BLOBS = 30
 
 class BlobLRU {
-  private map = new Map<string, string>() // path -> object URL, insertion order = recency
+  private map = new Map<string, string>()
 
   get(path: string): string | undefined {
     const url = this.map.get(path)
@@ -73,7 +69,7 @@ export function useZipWorker(url: string, reloadKey: number) {
     pendingExtractRef.current.clear()
     pendingSearchRef.current.clear()
 
-    const worker = new Worker(new URL("./zip-worker.ts", import.meta.url), { type: "module" })
+    const worker = new Worker(new URL("../lib/zip-worker.ts", import.meta.url), { type: "module" })
     workerRef.current = worker
 
     worker.addEventListener("message", (event: MessageEvent<WorkerResponse>) => {
@@ -181,9 +177,7 @@ export function useZipWorker(url: string, reloadKey: number) {
   return { status, errorMessage, progress, tree, summary, extractFile, search }
 }
 
-// Only used for the cache-hit path above, where we don't have the mime from
-// the worker response anymore — good enough for the <img>/<video>/etc tag to
-// pick a sensible renderer; the authoritative mime is set on first extract.
+
 function guessMimeFallback(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase() ?? ""
   const map: Record<string, string> = {

@@ -6,7 +6,7 @@ import XlsxViewer from "./xlsx-viewer"
 import ImageViewer from "./image-viewer"
 import VideoViewer from "./video-viewer"
 import AudioViewer from "./audio-viewer"
-import HtmlViewer from "./html-viewer"
+import CodeViewer from "./code-viewer"
 
 export type ViewerComponentProps = { url: string; name: string }
 export type ViewerComponent = React.ComponentType<ViewerComponentProps>
@@ -15,7 +15,7 @@ export const MIME_MAP: Record<string, ViewerComponent> = {
   "audio/*": AudioViewer,
   "video/*": VideoViewer,
   "image/*": ImageViewer,
-  "text/*": HtmlViewer,
+  "text/*": CodeViewer,
 
   "application/pdf": PdfViewer,
 
@@ -30,11 +30,11 @@ export const MIME_MAP: Record<string, ViewerComponent> = {
   "text/csv": XlsxViewer,
   "text/tab-separated-values": XlsxViewer,
 
-  "application/json": HtmlViewer,
-  "application/xml": HtmlViewer,
-  "application/x-yaml": HtmlViewer,
-  "application/javascript": HtmlViewer,
-  "application/typescript": HtmlViewer,
+  "application/json": CodeViewer,
+  "application/xml": CodeViewer,
+  "application/x-yaml": CodeViewer,
+  "application/javascript": CodeViewer,
+  "application/typescript": CodeViewer,
 
   "image/svg+xml": ImageViewer,
 }

@@ -1,11 +1,5 @@
-/// <reference lib="webworker" />
-
 import JSZip from "jszip"
 import MiniSearch from "minisearch"
-
-// ── Types shared with the main thread ──────────────────────────────────────
-// Kept in this file (rather than a separate types.ts) so the worker has no
-// import that could accidentally pull in DOM-dependent code.
 
 export interface ZipTreeFile {
   kind: "file"
@@ -13,7 +7,7 @@ export interface ZipTreeFile {
   name: string
   size: number
   compressedSize: number
-  date: string | null // ISO string; Date doesn't structured-clone across all environments predictably
+  date: string | null
   ext: string
 }
 
@@ -22,7 +16,6 @@ export interface ZipTreeFolder {
   path: string
   name: string
   children: Record<string, ZipTreeNode>
-  // Aggregate stats, computed once during parse — not recomputed on every render.
   fileCount: number
   folderCount: number
   totalSize: number
@@ -51,15 +44,11 @@ export type WorkerResponse =
   | { type: "extract-error"; requestId: string; path: string; message: string }
   | { type: "search-results"; requestId: string; paths: string[] }
 
-// ── Worker state ────────────────────────────────────────────────────────────
-// The live JSZip instance never leaves this worker. Only plain, cloneable
-// data (the tree, search results, extracted ArrayBuffers) crosses the
-// postMessage boundary.
 
 let zipInstance: JSZip | null = null
 let searchIndex: MiniSearch<{ id: string; path: string; name: string; ext: string }> | null = null
 
-const ctx = self as unknown as DedicatedWorkerGlobalScope
+const ctx = self as any
 
 function extensionOf(name: string): string {
   const dot = name.lastIndexOf(".")
@@ -189,9 +178,7 @@ async function handleParse(buffer: ArrayBuffer) {
     const total = allFiles.length
     const BATCH_SIZE = 500
 
-    // Incremental insertion in batches so a single huge synchronous loop
-    // never monopolizes the worker either — matters for archives in the
-    // hundreds of thousands of entries, and lets progress messages flow.
+
     for (let i = 0; i < total; i += BATCH_SIZE) {
       const batch = allFiles.slice(i, i + BATCH_SIZE)
       for (const relativePath of batch) {
@@ -200,8 +187,6 @@ async function handleParse(buffer: ArrayBuffer) {
       }
       const processed = Math.min(i + BATCH_SIZE, total)
       ;(ctx.postMessage as (msg: WorkerResponse) => void)({ type: "progress", processed, total })
-      // Yield back to the event loop between batches so postMessage flushes
-      // and this worker (and, if it's ever memory-mapped, the tab) stays responsive.
       await new Promise((resolve) => setTimeout(resolve, 0))
     }
 
@@ -251,8 +236,6 @@ async function handleExtract(path: string, requestId: string) {
     if (!file) throw new Error("File not found in archive")
     const arrayBuffer = await file.async("arraybuffer")
     const mime = guessMime(path)
-    // Transfer ownership of the buffer instead of structured-cloning it —
-    // avoids doubling memory for large binary assets crossing the boundary.
     ;(ctx.postMessage as (msg: WorkerResponse, transfer: Transferable[]) => void)(
       { type: "extracted", requestId, path, buffer: arrayBuffer, mime },
       [arrayBuffer]

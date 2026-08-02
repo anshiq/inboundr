@@ -1,5 +1,5 @@
-import { formatBytes } from "./tree-utils"
-import type { ArchiveSummary } from "./zip-worker"
+import { formatBytes } from "@/lib/drive";
+import type { ArchiveSummary } from "@/lib/zip-worker"
 
 export function ArchiveInfoStrip({ summary, archiveName }: { summary: ArchiveSummary; archiveName: string }) {
   const ratio =

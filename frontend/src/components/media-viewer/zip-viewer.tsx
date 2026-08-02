@@ -7,12 +7,12 @@ import {
 import { ToolbarButton, ToolbarLink, ViewerErrorState } from "./viewer-toolbar"
 import { cn } from "@/lib/utils"
 import { downloadFile, getComponentForMimeType } from "./viewer-utils"
-import { useZipWorker } from "./use-zip-worker"
-import { flattenTree, ancestorsOf, ancestorPathsOf, findNode, formatBytes, type SortConfig, type SortKey } from "./tree-utils"
+import { useZipWorker } from "@/hooks/use-zip-worker"
+import { flattenTree, ancestorsOf, ancestorPathsOf, findNode, formatBytes, type SortConfig, type SortKey } from "@/lib/drive"
 import { TreeNodeRow } from "./tree-node"
 import { ArchiveInfoStrip, ParsingProgress } from "./archive-info"
 import { iconForFile } from "./file-icons"
-import type { ZipTreeFile, ZipTreeFolder } from "./zip-worker"
+import type { ZipTreeFile, ZipTreeFolder } from "@/lib/zip-worker"
 
 interface ZipViewerProps {
   url: string
