@@ -214,7 +214,7 @@ const identifyProducts: GraphNode<typeof State> = async (state) => {
   return {
     queryProducts: response.products.map((product) => ({
       ...product,
-      specifications: sanitizeSpecificationKeys(product.specifications),
+      specifications: sanitizeSpecificationKeys(product.specifications ?? {}),
     })),
   };
 };
