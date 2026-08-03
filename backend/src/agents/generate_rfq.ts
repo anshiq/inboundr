@@ -169,6 +169,19 @@ const identifyCustomer: GraphNode<typeof State> = async (state) => {
   };
 };
 
+// Specifications are stored as a Mongoose Map, and MongoDB map keys cannot
+// contain "." or start with "$" (e.g. "Model No." fails with a CastError).
+function sanitizeSpecificationKeys(
+  specifications: Record<string, string>
+): Record<string, string> {
+  const sanitized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(specifications)) {
+    const cleanKey = key.replace(/\./g, "").replace(/^\$+/, "").trim();
+    if (cleanKey) sanitized[cleanKey] = value;
+  }
+  return sanitized;
+}
+
 const identifyProducts: GraphNode<typeof State> = async (state) => {
   console.log("NODE: Identify Products");
   // console.log("EMAIL BODY: ", state.emailBody);
@@ -199,7 +212,10 @@ const identifyProducts: GraphNode<typeof State> = async (state) => {
   console.log("RESPONSE: ", response);
 
   return {
-    queryProducts: response.products,
+    queryProducts: response.products.map((product) => ({
+      ...product,
+      specifications: sanitizeSpecificationKeys(product.specifications),
+    })),
   };
 };
 
