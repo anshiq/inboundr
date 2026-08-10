@@ -33,6 +33,7 @@ import { Route as EmployeesRouteImport } from './routes/employees'
 import { Route as EmailsRouteImport } from './routes/emails'
 import { Route as DriveRouteImport } from './routes/drive'
 import { Route as CustomersRouteImport } from './routes/customers'
+import { Route as CrmRouteImport } from './routes/crm'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as AssetsRouteImport } from './routes/assets'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -66,6 +67,7 @@ import { Route as EmployeesIdRouteImport } from './routes/employees_.$id'
 import { Route as CustomersNewRouteImport } from './routes/customers_.new'
 import { Route as CustomersImportRouteImport } from './routes/customers_.import'
 import { Route as CustomersIdRouteImport } from './routes/customers_.$id'
+import { Route as CrmIdRouteImport } from './routes/crm_.$id'
 import { Route as AssetsSettingsRouteImport } from './routes/assets_.settings'
 import { Route as AssetsNewRouteImport } from './routes/assets_.new'
 import { Route as AssetsImportRouteImport } from './routes/assets_.import'
@@ -199,6 +201,11 @@ const DriveRoute = DriveRouteImport.update({
 const CustomersRoute = CustomersRouteImport.update({
   id: '/customers',
   path: '/customers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrmRoute = CrmRouteImport.update({
+  id: '/crm',
+  path: '/crm',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChatRoute = ChatRouteImport.update({
@@ -366,6 +373,11 @@ const CustomersIdRoute = CustomersIdRouteImport.update({
   path: '/customers/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CrmIdRoute = CrmIdRouteImport.update({
+  id: '/crm_/$id',
+  path: '/crm/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AssetsSettingsRoute = AssetsSettingsRouteImport.update({
   id: '/assets_/settings',
   path: '/assets/settings',
@@ -444,6 +456,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/assets': typeof AssetsRoute
   '/chat': typeof ChatRoute
+  '/crm': typeof CrmRoute
   '/customers': typeof CustomersRoute
   '/drive': typeof DriveRoute
   '/emails': typeof EmailsRoute
@@ -473,6 +486,7 @@ export interface FileRoutesByFullPath {
   '/assets/import': typeof AssetsImportRoute
   '/assets/new': typeof AssetsNewRoute
   '/assets/settings': typeof AssetsSettingsRoute
+  '/crm/$id': typeof CrmIdRoute
   '/customers/$id': typeof CustomersIdRoute
   '/customers/import': typeof CustomersImportRoute
   '/customers/new': typeof CustomersNewRoute
@@ -517,6 +531,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/assets': typeof AssetsRoute
   '/chat': typeof ChatRoute
+  '/crm': typeof CrmRoute
   '/customers': typeof CustomersRoute
   '/drive': typeof DriveRoute
   '/emails': typeof EmailsRoute
@@ -541,6 +556,7 @@ export interface FileRoutesByTo {
   '/assets/import': typeof AssetsImportRoute
   '/assets/new': typeof AssetsNewRoute
   '/assets/settings': typeof AssetsSettingsRoute
+  '/crm/$id': typeof CrmIdRoute
   '/customers/$id': typeof CustomersIdRoute
   '/customers/import': typeof CustomersImportRoute
   '/customers/new': typeof CustomersNewRoute
@@ -586,6 +602,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/assets': typeof AssetsRoute
   '/chat': typeof ChatRoute
+  '/crm': typeof CrmRoute
   '/customers': typeof CustomersRoute
   '/drive': typeof DriveRoute
   '/emails': typeof EmailsRoute
@@ -615,6 +632,7 @@ export interface FileRoutesById {
   '/assets_/import': typeof AssetsImportRoute
   '/assets_/new': typeof AssetsNewRoute
   '/assets_/settings': typeof AssetsSettingsRoute
+  '/crm_/$id': typeof CrmIdRoute
   '/customers_/$id': typeof CustomersIdRoute
   '/customers_/import': typeof CustomersImportRoute
   '/customers_/new': typeof CustomersNewRoute
@@ -661,6 +679,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/assets'
     | '/chat'
+    | '/crm'
     | '/customers'
     | '/drive'
     | '/emails'
@@ -690,6 +709,7 @@ export interface FileRouteTypes {
     | '/assets/import'
     | '/assets/new'
     | '/assets/settings'
+    | '/crm/$id'
     | '/customers/$id'
     | '/customers/import'
     | '/customers/new'
@@ -734,6 +754,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/assets'
     | '/chat'
+    | '/crm'
     | '/customers'
     | '/drive'
     | '/emails'
@@ -758,6 +779,7 @@ export interface FileRouteTypes {
     | '/assets/import'
     | '/assets/new'
     | '/assets/settings'
+    | '/crm/$id'
     | '/customers/$id'
     | '/customers/import'
     | '/customers/new'
@@ -802,6 +824,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/assets'
     | '/chat'
+    | '/crm'
     | '/customers'
     | '/drive'
     | '/emails'
@@ -831,6 +854,7 @@ export interface FileRouteTypes {
     | '/assets_/import'
     | '/assets_/new'
     | '/assets_/settings'
+    | '/crm_/$id'
     | '/customers_/$id'
     | '/customers_/import'
     | '/customers_/new'
@@ -876,6 +900,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AssetsRoute: typeof AssetsRoute
   ChatRoute: typeof ChatRoute
+  CrmRoute: typeof CrmRoute
   CustomersRoute: typeof CustomersRoute
   DriveRoute: typeof DriveRoute
   EmailsRoute: typeof EmailsRoute
@@ -905,6 +930,7 @@ export interface RootRouteChildren {
   AssetsImportRoute: typeof AssetsImportRoute
   AssetsNewRoute: typeof AssetsNewRoute
   AssetsSettingsRoute: typeof AssetsSettingsRoute
+  CrmIdRoute: typeof CrmIdRoute
   CustomersIdRoute: typeof CustomersIdRoute
   CustomersImportRoute: typeof CustomersImportRoute
   CustomersNewRoute: typeof CustomersNewRoute
@@ -1101,6 +1127,13 @@ declare module '@tanstack/react-router' {
       path: '/customers'
       fullPath: '/customers'
       preLoaderRoute: typeof CustomersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crm': {
+      id: '/crm'
+      path: '/crm'
+      fullPath: '/crm'
+      preLoaderRoute: typeof CrmRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/chat': {
@@ -1334,6 +1367,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/crm_/$id': {
+      id: '/crm_/$id'
+      path: '/crm/$id'
+      fullPath: '/crm/$id'
+      preLoaderRoute: typeof CrmIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/assets_/settings': {
       id: '/assets_/settings'
       path: '/assets/settings'
@@ -1509,6 +1549,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AssetsRoute: AssetsRoute,
   ChatRoute: ChatRoute,
+  CrmRoute: CrmRoute,
   CustomersRoute: CustomersRoute,
   DriveRoute: DriveRoute,
   EmailsRoute: EmailsRoute,
@@ -1538,6 +1579,7 @@ const rootRouteChildren: RootRouteChildren = {
   AssetsImportRoute: AssetsImportRoute,
   AssetsNewRoute: AssetsNewRoute,
   AssetsSettingsRoute: AssetsSettingsRoute,
+  CrmIdRoute: CrmIdRoute,
   CustomersIdRoute: CustomersIdRoute,
   CustomersImportRoute: CustomersImportRoute,
   CustomersNewRoute: CustomersNewRoute,

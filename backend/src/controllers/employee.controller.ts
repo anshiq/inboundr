@@ -259,6 +259,8 @@ export async function listEmployeeModules(_req: Request, res: Response): Promise
       label:
         key === "rfq"
           ? "Quotation"
+          : key === "crm"
+          ? "CRM"
           : key === "service_management"
             ? "Service Management"
             : key === "recruitment"

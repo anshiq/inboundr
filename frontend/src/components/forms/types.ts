@@ -60,6 +60,14 @@ export type FormSettings = {
   collectDeviceInfo: boolean
 }
 
+export type FormLeadCapture = {
+  enabled: boolean
+  nameFieldId: string | null
+  emailFieldId: string | null
+  phoneFieldId: string | null
+  companyFieldId: string | null
+}
+
 export type FormFolder = {
   _id: string
   name: string
@@ -78,6 +86,7 @@ export type ManagedForm = {
   fields: FormField[]
   branding: FormBranding
   settings: FormSettings
+  leadCapture?: FormLeadCapture
   submissionCount: number
   updatedAt: string
   /** List-endpoint stats — absent on single-form responses. */

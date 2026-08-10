@@ -37,6 +37,14 @@ export interface IFormBranding {
   borderRadius: "sm" | "md" | "lg";
 }
 
+export interface IFormLeadCapture {
+  enabled: boolean;
+  nameFieldId: string | null;
+  emailFieldId: string | null;
+  phoneFieldId: string | null;
+  companyFieldId: string | null;
+}
+
 export interface IForm extends Document {
   organizationId: mongoose.Types.ObjectId;
   title: string;
@@ -53,6 +61,7 @@ export interface IForm extends Document {
     notifyOnSubmission: boolean;
     collectDeviceInfo: boolean;
   };
+  leadCapture: IFormLeadCapture;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -124,6 +133,13 @@ const formSchema = new Schema<IForm>(
       successMessage: { type: String, default: "Thanks. Your response has been submitted." },
       notifyOnSubmission: { type: Boolean, default: true },
       collectDeviceInfo: { type: Boolean, default: false },
+    },
+    leadCapture: {
+      enabled: { type: Boolean, default: false },
+      nameFieldId: { type: String, default: null },
+      emailFieldId: { type: String, default: null },
+      phoneFieldId: { type: String, default: null },
+      companyFieldId: { type: String, default: null },
     },
   },
   { timestamps: true }
