@@ -149,7 +149,7 @@ export const createLead = async (req: Request, res: Response): Promise<void> => 
       res.status(400).json({ error: "Invalid stage" });
       return;
     }
-    if (!stageId) stageId = String(stages[0]!._id);
+    if (!stageId) stageId = String(stages[0]._id);
 
     const source = LEAD_SOURCES.includes(req.body?.source) ? req.body.source : "manual";
     const last = await Lead.findOne({ organizationId: organization._id, stageId })

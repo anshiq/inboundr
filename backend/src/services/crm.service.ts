@@ -15,11 +15,15 @@ const DEFAULT_STAGES: Array<{ name: string; order: number; isWonStage: boolean }
   { name: "Won", order: 3, isWonStage: true },
 ];
 
+function isNonEmpty<T>(items: T[]): items is [T, ...T[]] {
+  return items.length > 0;
+}
+
 export async function getOrCreateLeadStages(
   organizationId: Types.ObjectId
-): Promise<ILeadStage[]> {
+): Promise<[ILeadStage, ...ILeadStage[]]> {
   const existing = await LeadStage.find({ organizationId }).sort({ order: 1 });
-  if (existing.length > 0) return existing;
+  if (isNonEmpty(existing)) return existing;
 
   try {
     await LeadStage.insertMany(
@@ -31,7 +35,13 @@ export async function getOrCreateLeadStages(
     if (err?.code !== 11000) throw err;
   }
 
-  return LeadStage.find({ organizationId }).sort({ order: 1 });
+  const stages = await LeadStage.find({ organizationId }).sort({ order: 1 });
+  if (!isNonEmpty(stages)) {
+    throw new Error(
+      `Lead stages could not be initialized for organization ${organizationId}`
+    );
+  }
+  return stages;
 }
 
 /** Creates a lead in the first pipeline stage from an automated source. */
@@ -47,7 +57,7 @@ export async function createCapturedLead(input: {
   metadata?: Record<string, unknown>;
 }): Promise<ILead> {
   const stages = await getOrCreateLeadStages(input.organizationId);
-  const firstStage = stages[0]!;
+  const firstStage = stages[0];
   const last = await Lead.findOne({
     organizationId: input.organizationId,
     stageId: firstStage._id,
