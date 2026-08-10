@@ -16,7 +16,7 @@ import { getAdminMe } from "@/lib/admin"
 import { ProBadge } from "@/components/pro-badge"
 import { useEntitlements, type EmployeeAccessModule, type FeatureKey } from "@/lib/entitlements"
 import { useOrganizationBranding } from "@/lib/organization-branding"
-import { BarChart3Icon, BotMessageSquareIcon, BriefcaseBusinessIcon, CircleDollarSignIcon, ClipboardListIcon, FileTextIcon, FolderKanbanIcon, HandshakeIcon, HardDriveIcon, HeadsetIcon, IdCardIcon, InboxIcon, LinkIcon, MonitorCogIcon, PackageIcon, ReceiptTextIcon, Settings2Icon, ShieldCheckIcon, ShoppingCartIcon, UsersIcon, WorkflowIcon, WrenchIcon } from "lucide-react"
+import { BotMessageSquareIcon, BriefcaseBusinessIcon, CircleDollarSignIcon, ClipboardListIcon, FileTextIcon, FolderKanbanIcon, HandshakeIcon, HardDriveIcon, HeadsetIcon, IdCardIcon, InboxIcon, LinkIcon, MonitorCogIcon, PackageIcon, ReceiptTextIcon, Settings2Icon, ShieldCheckIcon, ShoppingCartIcon, UsersIcon, WorkflowIcon, WrenchIcon } from "lucide-react"
 
 type SidebarNavItem = {
   title: string
@@ -62,13 +62,6 @@ const data: { navMain: SidebarCategory[] } = {
           url: "/workflows",
           icon: <WorkflowIcon />,
           feature: "workflows",
-          module: "rfq",
-        },
-        {
-          title: "Stats",
-          url: "/stats",
-          icon: <BarChart3Icon />,
-          feature: "rfq",
           module: "rfq",
         },
       ],

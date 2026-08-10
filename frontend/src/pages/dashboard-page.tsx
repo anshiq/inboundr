@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useNavigate, useSearch } from "@tanstack/react-router"
+import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import * as XLSX from "xlsx"
 
 import { AppLayout } from "@/components/app-layout"
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
+  BarChart3Icon,
   FileTextIcon,
   RefreshCwIcon,
   ChevronLeftIcon,
@@ -2395,6 +2396,22 @@ export function DashboardPage() {
                 )}
               </div>
               <div className="flex items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1.5 px-2 text-xs"
+                    >
+                      <Link to="/rfq/stats">
+                        <BarChart3Icon className="size-4" />
+                        Stats
+                      </Link>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>RFQ and email activity stats</TooltipContent>
+                </Tooltip>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
