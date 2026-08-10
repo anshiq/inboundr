@@ -6,6 +6,7 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCorners,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -210,6 +211,9 @@ function StageColumn({
   const [adding, setAdding] = useState(false)
   const [draftTitle, setDraftTitle] = useState("")
   const addRef = useRef<HTMLInputElement>(null)
+  // The column itself must be a drop target so leads can be dragged into it
+  // even when it is empty or the pointer is between cards.
+  const { setNodeRef } = useDroppable({ id: stage._id, data: { type: "column" } })
 
   useEffect(() => {
     if (adding) addRef.current?.focus()
@@ -308,7 +312,7 @@ function StageColumn({
         </p>
       )}
 
-      <div className="flex min-h-16 flex-1 flex-col gap-2 overflow-y-auto p-2">
+      <div ref={setNodeRef} className="flex min-h-16 flex-1 flex-col gap-2 overflow-y-auto p-2">
         <SortableContext items={leadIds} strategy={verticalListSortingStrategy}>
           {leadIds.map((leadId) => {
             const lead = leadsById.get(leadId)
