@@ -33,7 +33,7 @@ type LauncherTile = {
 // dedicated active card (Support, RFQ, Invoices) to avoid duplication.
 const launcherTiles: LauncherTile[] = [
   { title: "Inbox", description: "Read and reply to emails", url: "/emails", icon: InboxIcon, feature: "rfq", module: "rfq" },
-  { title: "Stats", description: "Dig into your numbers", url: "/stats", icon: BarChart3Icon, feature: "rfq", module: "rfq" },
+  { title: "Stats", description: "Dig into your numbers", url: "/rfq/stats", icon: BarChart3Icon, feature: "rfq", module: "rfq" },
   { title: "Chat", description: "Message your workspace", url: "/chat", icon: BotMessageSquareIcon, feature: "chat", module: "chat" },
   { title: "Products", description: "Manage your catalog", url: "/products", icon: PackageIcon, feature: "products", module: "products" },
   { title: "Receivables", description: "Track incoming payments", url: "/receivables", icon: CircleDollarSignIcon, feature: "invoices", module: "invoices" },

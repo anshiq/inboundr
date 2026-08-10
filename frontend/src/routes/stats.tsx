@@ -1,9 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 
-import { requireFeatureAndModuleAccess } from "@/lib/auth-guards"
-import StatsPage from "@/pages/stats-page"
-
+// Stats moved into the RFQ module; keep old bookmarks working.
 export const Route = createFileRoute("/stats")({
-  beforeLoad: () => requireFeatureAndModuleAccess("rfq", "rfq"),
-  component: StatsPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/rfq/stats" })
+  },
 })

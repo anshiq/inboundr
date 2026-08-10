@@ -47,6 +47,7 @@ import { Route as SupportTicketIdRouteImport } from './routes/support.$ticketId'
 import { Route as ServiceSummaryRouteImport } from './routes/service_.summary'
 import { Route as ServiceNewRouteImport } from './routes/service_.new'
 import { Route as ServiceRequestIdRouteImport } from './routes/service_.$requestId'
+import { Route as RfqStatsRouteImport } from './routes/rfq_.stats'
 import { Route as RecruitmentSettingsRouteImport } from './routes/recruitment_.settings'
 import { Route as RecruitmentJobsRouteImport } from './routes/recruitment_.jobs'
 import { Route as RecruitmentApplicantsRouteImport } from './routes/recruitment_.applicants'
@@ -271,6 +272,11 @@ const ServiceNewRoute = ServiceNewRouteImport.update({
 const ServiceRequestIdRoute = ServiceRequestIdRouteImport.update({
   id: '/service_/$requestId',
   path: '/service/$requestId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RfqStatsRoute = RfqStatsRouteImport.update({
+  id: '/rfq_/stats',
+  path: '/rfq/stats',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RecruitmentSettingsRoute = RecruitmentSettingsRouteImport.update({
@@ -507,6 +513,7 @@ export interface FileRoutesByFullPath {
   '/recruitment/applicants': typeof RecruitmentApplicantsRoute
   '/recruitment/jobs': typeof RecruitmentJobsRoute
   '/recruitment/settings': typeof RecruitmentSettingsRoute
+  '/rfq/stats': typeof RfqStatsRoute
   '/service/$requestId': typeof ServiceRequestIdRoute
   '/service/new': typeof ServiceNewRoute
   '/service/summary': typeof ServiceSummaryRoute
@@ -577,6 +584,7 @@ export interface FileRoutesByTo {
   '/recruitment/applicants': typeof RecruitmentApplicantsRoute
   '/recruitment/jobs': typeof RecruitmentJobsRoute
   '/recruitment/settings': typeof RecruitmentSettingsRoute
+  '/rfq/stats': typeof RfqStatsRoute
   '/service/$requestId': typeof ServiceRequestIdRoute
   '/service/new': typeof ServiceNewRoute
   '/service/summary': typeof ServiceSummaryRoute
@@ -653,6 +661,7 @@ export interface FileRoutesById {
   '/recruitment_/applicants': typeof RecruitmentApplicantsRoute
   '/recruitment_/jobs': typeof RecruitmentJobsRoute
   '/recruitment_/settings': typeof RecruitmentSettingsRoute
+  '/rfq_/stats': typeof RfqStatsRoute
   '/service_/$requestId': typeof ServiceRequestIdRoute
   '/service_/new': typeof ServiceNewRoute
   '/service_/summary': typeof ServiceSummaryRoute
@@ -730,6 +739,7 @@ export interface FileRouteTypes {
     | '/recruitment/applicants'
     | '/recruitment/jobs'
     | '/recruitment/settings'
+    | '/rfq/stats'
     | '/service/$requestId'
     | '/service/new'
     | '/service/summary'
@@ -800,6 +810,7 @@ export interface FileRouteTypes {
     | '/recruitment/applicants'
     | '/recruitment/jobs'
     | '/recruitment/settings'
+    | '/rfq/stats'
     | '/service/$requestId'
     | '/service/new'
     | '/service/summary'
@@ -875,6 +886,7 @@ export interface FileRouteTypes {
     | '/recruitment_/applicants'
     | '/recruitment_/jobs'
     | '/recruitment_/settings'
+    | '/rfq_/stats'
     | '/service_/$requestId'
     | '/service_/new'
     | '/service_/summary'
@@ -946,6 +958,7 @@ export interface RootRouteChildren {
   RecruitmentApplicantsRoute: typeof RecruitmentApplicantsRoute
   RecruitmentJobsRoute: typeof RecruitmentJobsRoute
   RecruitmentSettingsRoute: typeof RecruitmentSettingsRoute
+  RfqStatsRoute: typeof RfqStatsRoute
   ServiceRequestIdRoute: typeof ServiceRequestIdRoute
   ServiceNewRoute: typeof ServiceNewRoute
   ServiceSummaryRoute: typeof ServiceSummaryRoute
@@ -1225,6 +1238,13 @@ declare module '@tanstack/react-router' {
       path: '/service/$requestId'
       fullPath: '/service/$requestId'
       preLoaderRoute: typeof ServiceRequestIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rfq_/stats': {
+      id: '/rfq_/stats'
+      path: '/rfq/stats'
+      fullPath: '/rfq/stats'
+      preLoaderRoute: typeof RfqStatsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/recruitment_/settings': {
@@ -1595,6 +1615,7 @@ const rootRouteChildren: RootRouteChildren = {
   RecruitmentApplicantsRoute: RecruitmentApplicantsRoute,
   RecruitmentJobsRoute: RecruitmentJobsRoute,
   RecruitmentSettingsRoute: RecruitmentSettingsRoute,
+  RfqStatsRoute: RfqStatsRoute,
   ServiceRequestIdRoute: ServiceRequestIdRoute,
   ServiceNewRoute: ServiceNewRoute,
   ServiceSummaryRoute: ServiceSummaryRoute,

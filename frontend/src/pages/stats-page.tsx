@@ -278,6 +278,7 @@ export function StatsPage() {
   return (
     <AppLayout>
         <SiteHeader
+          breadcrumbs={[{ label: "RFQ", href: "/rfq" }, { label: "Stats" }]}
           actions={
             <Tooltip>
               <TooltipTrigger asChild>
