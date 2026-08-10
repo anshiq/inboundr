@@ -80,6 +80,21 @@ export function normalizeBranding(value: unknown): IFormBranding {
   };
 }
 
+function normalizeLeadCaptureFieldId(value: unknown): string | null {
+  return String(value ?? "").trim().slice(0, 80) || null;
+}
+
+export function normalizeLeadCapture(value: unknown) {
+  const leadCapture = (value ?? {}) as Record<string, unknown>;
+  return {
+    enabled: Boolean(leadCapture.enabled ?? false),
+    nameFieldId: normalizeLeadCaptureFieldId(leadCapture.nameFieldId),
+    emailFieldId: normalizeLeadCaptureFieldId(leadCapture.emailFieldId),
+    phoneFieldId: normalizeLeadCaptureFieldId(leadCapture.phoneFieldId),
+    companyFieldId: normalizeLeadCaptureFieldId(leadCapture.companyFieldId),
+  };
+}
+
 export function normalizeFormInput(body: Record<string, unknown>) {
   const title = String(body.title ?? "").trim();
   const slug = slugify(String(body.slug ?? title));
@@ -109,6 +124,7 @@ export function normalizeFormInput(body: Record<string, unknown>) {
       notifyOnSubmission: Boolean(settings.notifyOnSubmission ?? true),
       collectDeviceInfo: Boolean(settings.collectDeviceInfo ?? false),
     },
+    leadCapture: normalizeLeadCapture(body.leadCapture),
   };
 }
 

@@ -5,6 +5,7 @@ export const EMPLOYEE_ACCESS_MODULES = [
   "inbox",
   "products",
   "customers",
+  "crm",
   "invoices",
   "forms",
   "links",

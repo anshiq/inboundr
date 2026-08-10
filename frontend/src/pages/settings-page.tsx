@@ -352,6 +352,7 @@ const ACCESS_MODULE_OPTIONS: { value: EmployeeAccessModule; label: string }[] = 
   { value: "inbox", label: "Inbox" },
   { value: "products", label: "Products" },
   { value: "customers", label: "Customers" },
+  { value: "crm", label: "CRM" },
   { value: "invoices", label: "Invoices" },
   { value: "forms", label: "Forms" },
   { value: "links", label: "Links" },

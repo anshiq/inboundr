@@ -10,6 +10,7 @@ import productsRouter from "./routes/products.route";
 import rfqRouter from "./routes/rfq.route";
 import gmailRouter from "./routes/gmail.route";
 import customerRouter from "./routes/customer.route";
+import crmRouter from "./routes/crm.route";
 import organizationRouter from "./routes/organization.route";
 import formsRouter from "./routes/forms.route";
 import publicFormsRouter from "./routes/public-forms.route";
@@ -55,6 +56,7 @@ import {
 } from "./middleware/rate-limit.middleware";
 import { auth } from "./lib/auth";
 import { registerNotificationEventHandlers } from "./events/notification-event-handlers";
+import { registerCrmLeadCaptureHandlers } from "./events/crm-lead-capture-handlers";
 import {
   registerWorkflowEventHandlers,
   startWorkflowDelayWorker,
@@ -67,6 +69,7 @@ import {
 import { startCallRecordingCron } from "./jobs/call-recording-cron";
 import { startDigestCron } from "./jobs/digest-cron";
 import { startPaymentReminderCron } from "./jobs/payment-reminder-cron";
+import { startCrmActivityReminderCron } from "./jobs/crm-activity-reminder-cron";
 import { startRecruitmentRankingWorker } from "./services/recruitment-ranking.service";
 import { startRecruitmentAcknowledgementWorker } from "./services/recruitment-acknowledgement.service";
 import { backfillRFQThreadIds } from "./services/rfq.service";
@@ -116,6 +119,7 @@ app.use("/api/v1/products", productsRouter);
 app.use("/api/v1/rfq", rfqRouter);
 app.use("/api/v1/workflows", workflowRouter);
 app.use("/api/v1/customers", customerRouter);
+app.use("/api/v1/crm", crmRouter);
 app.use("/api/v1/organization", organizationRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/forms", formsRouter);
@@ -157,6 +161,7 @@ app.use((req: Request, res: Response) => {
 export async function initializeServices(): Promise<void> {
   await connectDB();
   registerNotificationEventHandlers();
+  registerCrmLeadCaptureHandlers();
   registerWorkflowEventHandlers();
   startWorkflowDelayWorker();
 
@@ -183,6 +188,7 @@ export async function initializeServices(): Promise<void> {
 
   startDigestCron();
   startPaymentReminderCron();
+  startCrmActivityReminderCron();
   startCallRecordingCron();
   startRecruitmentRankingWorker();
   startRecruitmentAcknowledgementWorker();

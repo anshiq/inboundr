@@ -41,6 +41,7 @@ import {
   type FormBranding,
   type FormField,
   type FormFolder,
+  type FormLeadCapture,
   type FormSettings,
   type ManagedForm,
 } from "@/components/forms/types"
@@ -57,6 +58,14 @@ const DEFAULT_BRANDING: FormBranding = {
   logoUrl: null,
 }
 
+const DEFAULT_LEAD_CAPTURE: FormLeadCapture = {
+  enabled: false,
+  nameFieldId: null,
+  emailFieldId: null,
+  phoneFieldId: null,
+  companyFieldId: null,
+}
+
 function draftSignature(form: ManagedForm) {
   return JSON.stringify({
     title: form.title,
@@ -68,6 +77,7 @@ function draftSignature(form: ManagedForm) {
     fields: form.fields,
     branding: form.branding,
     settings: form.settings,
+    leadCapture: form.leadCapture ?? DEFAULT_LEAD_CAPTURE,
   })
 }
 
@@ -150,6 +160,17 @@ export default function FormEditorPage() {
     setDraft((current) =>
       current
         ? { ...current, settings: { ...DEFAULT_SETTINGS, ...current.settings, ...patch } }
+        : current,
+    )
+  }
+
+  function patchLeadCapture(patch: Partial<FormLeadCapture>) {
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            leadCapture: { ...DEFAULT_LEAD_CAPTURE, ...current.leadCapture, ...patch },
+          }
         : current,
     )
   }
@@ -375,6 +396,54 @@ export default function FormEditorPage() {
                 checked={draft.settings.collectDeviceInfo}
                 onCheckedChange={(checked) => patchSettings({ collectDeviceInfo: checked })}
               />
+            </div>
+            <div className="space-y-3 border-t pt-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-[13px] font-medium">Create CRM leads</p>
+                  <p className="text-xs text-muted-foreground">
+                    Each submission adds a lead to the pipeline
+                  </p>
+                </div>
+                <Switch
+                  checked={draft.leadCapture?.enabled ?? false}
+                  onCheckedChange={(checked) => patchLeadCapture({ enabled: checked })}
+                />
+              </div>
+              {draft.leadCapture?.enabled && (
+                <div className="space-y-2">
+                  {(
+                    [
+                      { key: "nameFieldId", label: "Contact name" },
+                      { key: "emailFieldId", label: "Email" },
+                      { key: "phoneFieldId", label: "Phone" },
+                      { key: "companyFieldId", label: "Company" },
+                    ] as const
+                  ).map((mapping) => (
+                    <div key={mapping.key} className="flex items-center justify-between gap-2">
+                      <Label className="text-xs text-muted-foreground">{mapping.label}</Label>
+                      <select
+                        className="h-8 w-44 rounded-md border bg-background px-2 text-xs"
+                        value={draft.leadCapture?.[mapping.key] ?? ""}
+                        onChange={(event) =>
+                          patchLeadCapture({ [mapping.key]: event.target.value || null })
+                        }
+                      >
+                        <option value="">Not mapped</option>
+                        {draft.fields.map((field) => (
+                          <option key={field.id} value={field.id}>
+                            {field.label || "Untitled question"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground">
+                    Map at least one of contact name, email, or phone so leads carry useful
+                    details.
+                  </p>
+                </div>
+              )}
             </div>
             {isPublished && (
               <div className="border-t pt-3">

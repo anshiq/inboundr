@@ -7,6 +7,7 @@ export type FeatureKey =
   | "inbox"
   | "products"
   | "customers"
+  | "crm"
   | "invoices"
   | "forms"
   | "links"
@@ -25,6 +26,7 @@ export type EmployeeAccessModule =
   | "inbox"
   | "products"
   | "customers"
+  | "crm"
   | "invoices"
   | "forms"
   | "links"
@@ -63,6 +65,7 @@ const DEFAULT_ENTITLEMENTS: EntitlementState = {
     "inbox",
     "products",
     "customers",
+    "crm",
     "invoices",
     "forms",
     "links",
