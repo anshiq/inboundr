@@ -13,6 +13,12 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -21,6 +27,7 @@ import {
 } from "@/components/ui/select"
 import {
   BarChart3Icon,
+  EllipsisVerticalIcon,
   FileTextIcon,
   RefreshCwIcon,
   ChevronLeftIcon,
@@ -2396,22 +2403,6 @@ export function DashboardPage() {
                 )}
               </div>
               <div className="flex items-center gap-1">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      asChild
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 gap-1.5 px-2 text-xs"
-                    >
-                      <Link to="/rfq/stats">
-                        <BarChart3Icon className="size-4" />
-                        Stats
-                      </Link>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>RFQ and email activity stats</TooltipContent>
-                </Tooltip>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -2516,6 +2507,21 @@ export function DashboardPage() {
                   </TooltipTrigger>
                   <TooltipContent>Refresh (R)</TooltipContent>
                 </Tooltip>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="size-8">
+                      <EllipsisVerticalIcon className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link to="/rfq/stats">
+                        <BarChart3Icon className="size-4" />
+                        View Stats
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
