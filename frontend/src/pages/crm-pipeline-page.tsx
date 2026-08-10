@@ -747,7 +747,7 @@ export default function CrmPipelinePage() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="lead-contact">Contact name</Label>
+                <Label htmlFor="lead-contact">Contact Name</Label>
                 <Input
                   id="lead-contact"
                   value={form.contactName}
@@ -782,14 +782,16 @@ export default function CrmPipelinePage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="lead-revenue">Expected revenue</Label>
+                <Label htmlFor="lead-revenue">Expected Revenue</Label>
                 <Input
                   id="lead-revenue"
-                  type="number"
-                  min="0"
+                  inputMode="decimal"
                   value={form.expectedRevenue}
                   onChange={(event) =>
-                    setForm((current) => ({ ...current, expectedRevenue: event.target.value }))
+                    setForm((current) => ({
+                      ...current,
+                      expectedRevenue: event.target.value.replace(/[^0-9.]/g, ""),
+                    }))
                   }
                 />
               </div>

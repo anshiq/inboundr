@@ -623,7 +623,7 @@ export default function CrmLeadDetailPage() {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="grid gap-2">
-                        <Label htmlFor="detail-contact">Contact name</Label>
+                        <Label htmlFor="detail-contact">Contact Name</Label>
                         <Input
                           id="detail-contact"
                           value={form.contactName}
@@ -656,14 +656,16 @@ export default function CrmLeadDetailPage() {
                         />
                       </div>
                       <div className="grid gap-2">
-                        <Label htmlFor="detail-revenue">Expected revenue</Label>
+                        <Label htmlFor="detail-revenue">Expected Revenue</Label>
                         <Input
                           id="detail-revenue"
-                          type="number"
-                          min="0"
+                          inputMode="decimal"
                           value={form.expectedRevenue}
                           onChange={(event) =>
-                            setForm({ ...form, expectedRevenue: event.target.value })
+                            setForm({
+                              ...form,
+                              expectedRevenue: event.target.value.replace(/[^0-9.]/g, ""),
+                            })
                           }
                         />
                       </div>
@@ -671,11 +673,14 @@ export default function CrmLeadDetailPage() {
                         <Label htmlFor="detail-probability">Probability (%)</Label>
                         <Input
                           id="detail-probability"
-                          type="number"
-                          min="0"
-                          max="100"
+                          inputMode="numeric"
                           value={form.probability}
-                          onChange={(event) => setForm({ ...form, probability: event.target.value })}
+                          onChange={(event) =>
+                            setForm({
+                              ...form,
+                              probability: event.target.value.replace(/[^0-9]/g, ""),
+                            })
+                          }
                         />
                       </div>
                     </div>
