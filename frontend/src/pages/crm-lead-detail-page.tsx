@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner"
 
 import { AppLayout } from "@/components/app-layout"
+import { DatePicker } from "@/components/date-picker"
 import { ErrorState } from "@/components/list-states"
 import { SiteHeader } from "@/components/site-header"
 import { Button } from "@/components/ui/button"
@@ -316,6 +317,14 @@ export default function CrmLeadDetailPage() {
     void load()
     void listGmailAccountOptions().then(setAccounts)
   }, [load])
+
+  // Keep the composer's To field in sync with the lead's email whenever the
+  // user has not typed a recipient themselves.
+  const leadEmail = lead?.email ?? ""
+  useEffect(() => {
+    if (!leadEmail) return
+    setEmailDraft((current) => (current.to ? current : { ...current, to: leadEmail }))
+  }, [leadEmail, composerTab])
 
   async function refreshTimeline() {
     const data = await listTimeline(id).catch(() => null)
@@ -725,18 +734,13 @@ export default function CrmLeadDetailPage() {
                             </Select>
                           </div>
                           <div className="grid gap-1.5">
-                            <Label htmlFor="activity-due">Due date</Label>
-                            <Input
-                              id="activity-due"
-                              type="datetime-local"
-                              className="bg-background"
+                            <Label>Due date</Label>
+                            <DatePicker
                               value={activityDraft.dueDate}
-                              onChange={(event) =>
-                                setActivityDraft((current) => ({
-                                  ...current,
-                                  dueDate: event.target.value,
-                                }))
+                              onChange={(value) =>
+                                setActivityDraft((current) => ({ ...current, dueDate: value }))
                               }
+                              placeholder="Pick a due date"
                             />
                           </div>
                         </div>
