@@ -179,6 +179,14 @@ export function deleteStage(stageId: string) {
   })
 }
 
+export interface AgendaActivity extends LeadActivity {
+  lead: Pick<Lead, "_id" | "title" | "contactName" | "company" | "status">
+}
+
+export function listAllPlannedActivities() {
+  return api<{ activities: AgendaActivity[] }>("/activities")
+}
+
 export function listActivities(leadId: string) {
   return api<{ activities: LeadActivity[] }>(`/leads/${leadId}/activities`)
 }

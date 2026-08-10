@@ -11,6 +11,7 @@ import {
   getBoard,
   getLead,
   listActivities,
+  listAllActivities,
   listStages,
   listTimeline,
   markActivityDone,
@@ -39,6 +40,7 @@ router.use(requireFeature("crm"));
 router.use(requireEmployeeModule("crm"));
 
 router.get("/board", getBoard);
+router.get("/activities", listAllActivities);
 
 router.get("/stages", listStages);
 router.post("/stages", requireOrganizationAdmin(), createStage);

@@ -535,6 +535,41 @@ export const deleteStage = async (req: Request, res: Response): Promise<void> =>
 // Planned activities
 // ---------------------------------------------------------------------------
 
+/** All planned activities across leads, joined with lead context for the agenda view. */
+export const listAllActivities = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const organization = (req as OrganizationRequest).organization;
+
+    const activities = await LeadActivity.find({
+      organizationId: organization._id,
+      status: "planned",
+    })
+      .sort({ dueDate: 1, createdAt: 1 })
+      .limit(500)
+      .lean();
+
+    const leads = await Lead.find({
+      _id: { $in: activities.map((activity) => activity.leadId) },
+      isArchived: { $ne: true },
+    })
+      .select("title contactName company status")
+      .lean();
+    const leadById = new Map(leads.map((lead) => [String(lead._id), lead]));
+
+    res.json({
+      activities: activities
+        .filter((activity) => leadById.has(String(activity.leadId)))
+        .map((activity) => ({
+          ...activity,
+          lead: leadById.get(String(activity.leadId)),
+        })),
+    });
+  } catch (err) {
+    console.error("Error listing CRM activities:", err);
+    res.status(500).json({ error: "Failed to fetch activities" });
+  }
+};
+
 export const listActivities = async (req: Request, res: Response): Promise<void> => {
   try {
     const lead = await findLead(req, res);

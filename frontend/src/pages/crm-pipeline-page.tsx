@@ -25,6 +25,8 @@ import {
   BuildingIcon,
   CalendarClockIcon,
   HandshakeIcon,
+  KanbanIcon,
+  ListIcon,
   MailIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -39,6 +41,8 @@ import {
 import { toast } from "sonner"
 
 import { AppLayout } from "@/components/app-layout"
+import { LeadActivitiesView } from "@/components/crm/lead-activities-view"
+import { LeadListView } from "@/components/crm/lead-list-view"
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/list-states"
 import { PageToolbar } from "@/components/page-header"
 import { SiteHeader } from "@/components/site-header"
@@ -82,6 +86,37 @@ import { formatMoney, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 type ItemsMap = Record<string, string[]>
+
+type CrmView = "board" | "list" | "activities"
+
+const VIEW_OPTIONS: { key: CrmView; label: string; icon: typeof KanbanIcon }[] = [
+  { key: "board", label: "Board", icon: KanbanIcon },
+  { key: "list", label: "List", icon: ListIcon },
+  { key: "activities", label: "Activities", icon: CalendarClockIcon },
+]
+
+function ViewSwitcher({ view, onChange }: { view: CrmView; onChange: (view: CrmView) => void }) {
+  return (
+    <div className="flex items-center rounded-lg border bg-muted/40 p-0.5">
+      {VIEW_OPTIONS.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          className={cn(
+            "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition",
+            view === key
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Icon className="size-3.5" />
+          <span className="hidden sm:inline">{label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
 
 function buildItems(stages: LeadStage[], leads: BoardLead[]): ItemsMap {
   const map: ItemsMap = {}
@@ -462,6 +497,7 @@ export default function CrmPipelinePage() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [searchDraft, setSearchDraft] = useState("")
+  const [view, setView] = useState<CrmView>("board")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<NewLeadForm>(EMPTY_LEAD_FORM)
   const [creating, setCreating] = useState(false)
@@ -650,29 +686,34 @@ export default function CrmPipelinePage() {
           <PageToolbar
             icon={HandshakeIcon}
             title="CRM Pipeline"
-            count={loading ? null : leads.length}
+            count={loading || view === "activities" ? null : leads.length}
             actions={
               <>
-                <div className="relative">
-                  <SearchIcon className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={searchDraft}
-                    onChange={(event) => setSearchDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") setSearch(searchDraft.trim())
-                    }}
-                    placeholder="Search leads..."
-                    className="h-8 w-56 pl-8"
-                  />
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void loadBoard(search)}
-                  aria-label="Refresh"
-                >
-                  <RefreshCwIcon className="size-4" />
-                </Button>
+                <ViewSwitcher view={view} onChange={setView} />
+                {view !== "activities" && (
+                  <>
+                    <div className="relative">
+                      <SearchIcon className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={searchDraft}
+                        onChange={(event) => setSearchDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") setSearch(searchDraft.trim())
+                        }}
+                        placeholder="Search leads..."
+                        className="h-8 w-56 pl-8"
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void loadBoard(search)}
+                      aria-label="Refresh"
+                    >
+                      <RefreshCwIcon className="size-4" />
+                    </Button>
+                  </>
+                )}
                 <Button size="sm" onClick={() => setDialogOpen(true)}>
                   <PlusIcon className="size-4" />
                   New Lead
@@ -681,7 +722,11 @@ export default function CrmPipelinePage() {
             }
           />
 
-          {loading ? (
+          {view === "activities" ? (
+            <LeadActivitiesView
+              onOpenLead={(id) => void navigate({ to: "/crm/$id", params: { id } })}
+            />
+          ) : loading ? (
             <ListSkeleton rows={6} columns={4} />
           ) : error ? (
             <ErrorState message={error} onRetry={() => void loadBoard(search)} />
@@ -690,6 +735,12 @@ export default function CrmPipelinePage() {
               icon={HandshakeIcon}
               title="No Pipeline Yet"
               description="Stages will be created automatically when you add your first lead."
+            />
+          ) : view === "list" ? (
+            <LeadListView
+              leads={leads}
+              stages={stages}
+              onOpenLead={(id) => void navigate({ to: "/crm/$id", params: { id } })}
             />
           ) : (
             <div className="flex-1 overflow-hidden p-4">
