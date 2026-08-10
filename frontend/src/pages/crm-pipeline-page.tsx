@@ -89,6 +89,14 @@ type ItemsMap = Record<string, string[]>
 
 type CrmView = "board" | "list" | "activities"
 
+const VIEW_STORAGE_KEY = "crm-pipeline-view"
+
+function readStoredView(): CrmView {
+  if (typeof window === "undefined") return "board"
+  const stored = window.localStorage.getItem(VIEW_STORAGE_KEY)
+  return stored === "list" || stored === "activities" ? stored : "board"
+}
+
 const VIEW_OPTIONS: { key: CrmView; label: string; icon: typeof KanbanIcon }[] = [
   { key: "board", label: "Board", icon: KanbanIcon },
   { key: "list", label: "List", icon: ListIcon },
@@ -497,7 +505,7 @@ export default function CrmPipelinePage() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [searchDraft, setSearchDraft] = useState("")
-  const [view, setView] = useState<CrmView>("board")
+  const [view, setView] = useState<CrmView>(readStoredView)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<NewLeadForm>(EMPTY_LEAD_FORM)
   const [creating, setCreating] = useState(false)
@@ -689,7 +697,13 @@ export default function CrmPipelinePage() {
             count={loading || view === "activities" ? null : leads.length}
             actions={
               <>
-                <ViewSwitcher view={view} onChange={setView} />
+                <ViewSwitcher
+                  view={view}
+                  onChange={(next) => {
+                    setView(next)
+                    window.localStorage.setItem(VIEW_STORAGE_KEY, next)
+                  }}
+                />
                 {view !== "activities" && (
                   <>
                     <div className="relative">
