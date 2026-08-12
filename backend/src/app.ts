@@ -46,6 +46,7 @@ import serviceManagementRouter from "./routes/service-management.route";
 import workflowRouter from "./routes/workflow.route";
 import recruitmentRouter from "./routes/recruitment.route";
 import publicRecruitmentRouter from "./routes/public-recruitment.route";
+import publicWaitlistRouter from "./routes/public-waitlist.route";
 import { connectDB, disconnectDB } from "./config/database.config";
 import { ensureKnowledgeSchema } from "./db/knowledge-schema";
 import { embedOrigin, frontendOrigin, landingOrigin } from "./config/origins.config";
@@ -53,6 +54,7 @@ import {
   contactLimiter,
   generalApiLimiter,
   publicReadLimiter,
+  publicWriteLimiter,
 } from "./middleware/rate-limit.middleware";
 import { auth } from "./lib/auth";
 import { registerNotificationEventHandlers } from "./events/notification-event-handlers";
@@ -147,6 +149,7 @@ app.use("/api/v1/public/drive", publicDriveRouter);
 app.use("/api/v1/public/attendance", publicAttendanceRouter);
 app.use("/api/v1/public/support", publicSupportRouter);
 app.use("/api/v1/public/recruitment", publicRecruitmentRouter);
+app.use("/api/v1/public/waitlist", publicWriteLimiter, publicWaitlistRouter);
 app.use("/l", publicReadLimiter, publicLinksRouter);
 app.use("/f", publicReadLimiter, formShareRouter);
 app.use("/api/v1/stats", statsRouter);

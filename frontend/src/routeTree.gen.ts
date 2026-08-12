@@ -73,6 +73,7 @@ import { Route as AssetsSettingsRouteImport } from './routes/assets_.settings'
 import { Route as AssetsNewRouteImport } from './routes/assets_.new'
 import { Route as AssetsImportRouteImport } from './routes/assets_.import'
 import { Route as AssetsIdRouteImport } from './routes/assets_.$id'
+import { Route as AdminWaitlistRouteImport } from './routes/admin_.waitlist'
 import { Route as AdminFeedbackRouteImport } from './routes/admin_.feedback'
 import { Route as AdminFeedbackIndexRouteImport } from './routes/admin_.feedback.index'
 import { Route as RecruitmentJobsNewRouteImport } from './routes/recruitment_.jobs_.new'
@@ -404,6 +405,11 @@ const AssetsIdRoute = AssetsIdRouteImport.update({
   path: '/assets/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminWaitlistRoute = AdminWaitlistRouteImport.update({
+  id: '/admin_/waitlist',
+  path: '/admin/waitlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminFeedbackRoute = AdminFeedbackRouteImport.update({
   id: '/admin_/feedback',
   path: '/admin/feedback',
@@ -488,6 +494,7 @@ export interface FileRoutesByFullPath {
   '/support': typeof SupportRouteWithChildren
   '/workflows': typeof WorkflowsRoute
   '/admin/feedback': typeof AdminFeedbackRouteWithChildren
+  '/admin/waitlist': typeof AdminWaitlistRoute
   '/assets/$id': typeof AssetsIdRoute
   '/assets/import': typeof AssetsImportRoute
   '/assets/new': typeof AssetsNewRoute
@@ -559,6 +566,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/stats': typeof StatsRoute
   '/workflows': typeof WorkflowsRoute
+  '/admin/waitlist': typeof AdminWaitlistRoute
   '/assets/$id': typeof AssetsIdRoute
   '/assets/import': typeof AssetsImportRoute
   '/assets/new': typeof AssetsNewRoute
@@ -636,6 +644,7 @@ export interface FileRoutesById {
   '/support': typeof SupportRouteWithChildren
   '/workflows': typeof WorkflowsRoute
   '/admin_/feedback': typeof AdminFeedbackRouteWithChildren
+  '/admin_/waitlist': typeof AdminWaitlistRoute
   '/assets_/$id': typeof AssetsIdRoute
   '/assets_/import': typeof AssetsImportRoute
   '/assets_/new': typeof AssetsNewRoute
@@ -714,6 +723,7 @@ export interface FileRouteTypes {
     | '/support'
     | '/workflows'
     | '/admin/feedback'
+    | '/admin/waitlist'
     | '/assets/$id'
     | '/assets/import'
     | '/assets/new'
@@ -785,6 +795,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/stats'
     | '/workflows'
+    | '/admin/waitlist'
     | '/assets/$id'
     | '/assets/import'
     | '/assets/new'
@@ -861,6 +872,7 @@ export interface FileRouteTypes {
     | '/support'
     | '/workflows'
     | '/admin_/feedback'
+    | '/admin_/waitlist'
     | '/assets_/$id'
     | '/assets_/import'
     | '/assets_/new'
@@ -938,6 +950,7 @@ export interface RootRouteChildren {
   SupportRoute: typeof SupportRouteWithChildren
   WorkflowsRoute: typeof WorkflowsRoute
   AdminFeedbackRoute: typeof AdminFeedbackRouteWithChildren
+  AdminWaitlistRoute: typeof AdminWaitlistRoute
   AssetsIdRoute: typeof AssetsIdRoute
   AssetsImportRoute: typeof AssetsImportRoute
   AssetsNewRoute: typeof AssetsNewRoute
@@ -1422,6 +1435,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssetsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/waitlist': {
+      id: '/admin_/waitlist'
+      path: '/admin/waitlist'
+      fullPath: '/admin/waitlist'
+      preLoaderRoute: typeof AdminWaitlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/feedback': {
       id: '/admin_/feedback'
       path: '/admin/feedback'
@@ -1595,6 +1615,7 @@ const rootRouteChildren: RootRouteChildren = {
   SupportRoute: SupportRouteWithChildren,
   WorkflowsRoute: WorkflowsRoute,
   AdminFeedbackRoute: AdminFeedbackRouteWithChildren,
+  AdminWaitlistRoute: AdminWaitlistRoute,
   AssetsIdRoute: AssetsIdRoute,
   AssetsImportRoute: AssetsImportRoute,
   AssetsNewRoute: AssetsNewRoute,

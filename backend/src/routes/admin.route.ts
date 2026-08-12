@@ -27,6 +27,7 @@ import {
   listAdminPhoneNumbers,
   updateAdminPhoneNumber,
 } from "../controllers/admin-phone-number.controller";
+import { listAdminWaitlist } from "../controllers/waitlist.controller";
 import { requireAuth, requireSuperAdmin } from "../middleware/auth.middleware";
 
 const router = Router();
@@ -38,6 +39,7 @@ router.get("/plans", getAdminPlans);
 router.get("/organizations", listAdminOrganizations);
 router.get("/users", listAdminUsers);
 router.post("/notifications/sample", sendAdminSampleNotification);
+router.get("/waitlist", listAdminWaitlist);
 router.get("/feedback", listAdminFeedback);
 router.get("/feedback/:id", getAdminFeedback);
 router.post("/feedback/:id/messages", replyAdminFeedback);

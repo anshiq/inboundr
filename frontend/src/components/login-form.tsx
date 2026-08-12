@@ -134,7 +134,7 @@ export function LoginForm({
               search={getInviteSearch()}
               className="underline underline-offset-4"
             >
-              Sign Up
+              {getInviteToken() ? "Sign Up" : "Join the Waitlist"}
             </Link>
           </FieldDescription>
         </Field>
