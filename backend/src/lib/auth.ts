@@ -1,11 +1,13 @@
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { organization } from "better-auth/plugins";
 import { MongoClient } from "mongodb";
 import { createElement } from "react";
 import { ResetPasswordEmail } from "../emails/reset-password";
 import { VerifyEmail } from "../emails/verify-email";
 import { frontendOrigin } from "../config/origins.config";
+import { OrganizationInvitation } from "../models/organization-invitation.model";
 import { sendEmail } from "./email";
 
 const mongoUri = process.env.MONGODB_URI;
@@ -30,6 +32,31 @@ export const auth = betterAuth({
         input: false,
       },
     },
+  },
+  // Public sign-up is disabled for now: only emails with a pending
+  // organization invitation may register. Everyone else joins the waitlist
+  // (/api/v1/public/waitlist). Admin-created accounts are unaffected because
+  // they go through internalAdapter.createUser, not this HTTP endpoint.
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/sign-up/email") return;
+
+      const email = String(ctx.body?.email ?? "")
+        .toLowerCase()
+        .trim();
+      const invitation = await OrganizationInvitation.findOne({
+        email,
+        status: "pending",
+        expiresAt: { $gt: new Date() },
+      }).lean();
+
+      if (!invitation) {
+        throw new APIError("FORBIDDEN", {
+          message:
+            "Sign-ups are currently invite-only. Join the waitlist and we'll reach out when your spot opens up.",
+        });
+      }
+    }),
   },
   databaseHooks: {
     session: {
@@ -99,6 +126,9 @@ export const auth = betterAuth({
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      // Existing Google users can still sign in; new accounts are blocked
+      // while sign-up is waitlist-only.
+      disableSignUp: true,
     },
   },
   plugins: [
