@@ -15,6 +15,10 @@ export async function getAdminMe(): Promise<{ isSuperAdmin: boolean }> {
 export interface WaitlistEntry {
   _id: string
   email: string
+  name: string
+  companyName: string
+  referralSource: string
+  referralSourceLabel: string
   createdAt: string
 }
 

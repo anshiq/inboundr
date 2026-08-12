@@ -393,12 +393,19 @@ function SidebarContent({
     height: number
   } | null>(null)
   const [dragging, setDragging] = React.useState(false)
+  const dragCleanupRef = React.useRef<(() => void) | null>(null)
 
   const updateThumb = React.useCallback(() => {
     const viewport = viewportRef.current
     if (!viewport) return
     const { scrollTop, scrollHeight, clientHeight } = viewport
-    if (scrollHeight <= clientHeight + 1) {
+    // Hide the thumb when there's nothing to scroll, or when the viewport is
+    // too short to fit even the minimum thumb (maxTop would be <= 0 and the
+    // drag math would divide by zero or invert).
+    if (
+      scrollHeight <= clientHeight + 1 ||
+      clientHeight <= SCROLL_THUMB_MIN_HEIGHT
+    ) {
       setThumb(null)
       return
     }
@@ -429,6 +436,7 @@ function SidebarContent({
 
     const scrollable = viewport.scrollHeight - viewport.clientHeight
     const maxTop = viewport.clientHeight - thumb.height
+    if (scrollable <= 0 || maxTop <= 0) return
     let startScrollTop = viewport.scrollTop
 
     // Clicking the track (not the thumb) jumps so the thumb centers there,
@@ -458,10 +466,18 @@ function SidebarContent({
       document.body.style.cursor = previousCursor
       window.removeEventListener("pointermove", handleMove)
       window.removeEventListener("pointerup", handleUp)
+      dragCleanupRef.current = null
     }
     window.addEventListener("pointermove", handleMove)
     window.addEventListener("pointerup", handleUp)
+    dragCleanupRef.current = handleUp
   }
+
+  // If the component unmounts mid-drag, tear down the window listeners and
+  // restore the body cursor.
+  React.useEffect(() => {
+    return () => dragCleanupRef.current?.()
+  }, [])
 
   return (
     <div

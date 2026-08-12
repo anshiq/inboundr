@@ -87,14 +87,25 @@ export default function AdminWaitlistPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="pl-5">Email</TableHead>
+                    <TableHead className="pl-5">Name</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Heard About Us</TableHead>
                     <TableHead>Joined</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {entries.map((entry) => (
                     <TableRow key={entry._id}>
-                      <TableCell className="pl-5">{entry.email}</TableCell>
+                      <TableCell className="pl-5">
+                        <div className="text-sm">{entry.name || "-"}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {entry.email}
+                        </div>
+                      </TableCell>
+                      <TableCell>{entry.companyName || "-"}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {entry.referralSourceLabel || "-"}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDateTime(entry.createdAt)}
                       </TableCell>
