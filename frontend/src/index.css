@@ -179,6 +179,16 @@
 }
 
 @layer components {
+  /* Sidebar scroll viewport: the native scrollbar is hidden because the
+     sidebar renders its own interactive overlay thumb (see SidebarContent). */
+  .sidebar-scroll {
+    scrollbar-width: none;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
   .international-phone-input {
     @apply flex h-9 w-full items-center rounded-md border border-input bg-transparent shadow-xs transition-[border-color,box-shadow] dark:bg-input/30;
   }

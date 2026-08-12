@@ -378,17 +378,125 @@ function SidebarSeparator({
   )
 }
 
-function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
+const SCROLL_THUMB_MIN_HEIGHT = 32
+
+function SidebarContent({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"div">) {
+  const viewportRef = React.useRef<HTMLDivElement>(null)
+  const contentRef = React.useRef<HTMLDivElement>(null)
+  const thumbRef = React.useRef<HTMLDivElement>(null)
+  const [thumb, setThumb] = React.useState<{
+    top: number
+    height: number
+  } | null>(null)
+  const [dragging, setDragging] = React.useState(false)
+
+  const updateThumb = React.useCallback(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    const { scrollTop, scrollHeight, clientHeight } = viewport
+    if (scrollHeight <= clientHeight + 1) {
+      setThumb(null)
+      return
+    }
+    const height = Math.max(
+      (clientHeight / scrollHeight) * clientHeight,
+      SCROLL_THUMB_MIN_HEIGHT
+    )
+    const maxTop = clientHeight - height
+    const top = (scrollTop / (scrollHeight - clientHeight)) * maxTop
+    setThumb({ top, height })
+  }, [])
+
+  React.useEffect(() => {
+    updateThumb()
+    const viewport = viewportRef.current
+    const content = contentRef.current
+    if (!viewport || !content) return
+    const observer = new ResizeObserver(updateThumb)
+    observer.observe(viewport)
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [updateThumb])
+
+  const handleTrackPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const viewport = viewportRef.current
+    if (!viewport || !thumb || event.button !== 0) return
+    event.preventDefault()
+
+    const scrollable = viewport.scrollHeight - viewport.clientHeight
+    const maxTop = viewport.clientHeight - thumb.height
+    let startScrollTop = viewport.scrollTop
+
+    // Clicking the track (not the thumb) jumps so the thumb centers there,
+    // then transitions straight into a drag.
+    if (event.target !== thumbRef.current) {
+      const trackY =
+        event.clientY - event.currentTarget.getBoundingClientRect().top
+      const targetTop = Math.min(
+        Math.max(trackY - thumb.height / 2, 0),
+        maxTop
+      )
+      startScrollTop = (targetTop / maxTop) * scrollable
+      viewport.scrollTop = startScrollTop
+    }
+
+    const startY = event.clientY
+    setDragging(true)
+    const previousCursor = document.body.style.cursor
+    document.body.style.cursor = "grabbing"
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      viewport.scrollTop =
+        startScrollTop + ((moveEvent.clientY - startY) / maxTop) * scrollable
+    }
+    const handleUp = () => {
+      setDragging(false)
+      document.body.style.cursor = previousCursor
+      window.removeEventListener("pointermove", handleMove)
+      window.removeEventListener("pointerup", handleUp)
+    }
+    window.addEventListener("pointermove", handleMove)
+    window.addEventListener("pointerup", handleUp)
+  }
+
   return (
     <div
       data-slot="sidebar-content"
       data-sidebar="content"
-      className={cn(
-        "no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
-        className
-      )}
+      className={cn("relative min-h-0 flex-1", className)}
       {...props}
-    />
+    >
+      <div
+        ref={viewportRef}
+        onScroll={updateThumb}
+        className="sidebar-scroll h-full overflow-y-auto group-data-[collapsible=icon]:overflow-hidden"
+      >
+        <div ref={contentRef} className="flex flex-col gap-2">
+          {children}
+        </div>
+      </div>
+      {thumb && (
+        <div
+          onPointerDown={handleTrackPointerDown}
+          className="absolute inset-y-0 right-0 w-2.5 cursor-grab group-data-[collapsible=icon]:hidden"
+        >
+          <div
+            ref={thumbRef}
+            style={{ top: thumb.top, height: thumb.height }}
+            className={cn(
+              "absolute right-0 rounded-full transition-[width,background-color] duration-150",
+              dragging
+                ? "w-1.5 bg-sidebar-foreground/40"
+                : "w-1 bg-sidebar-foreground/15 hover:w-1.5 hover:bg-sidebar-foreground/30"
+            )}
+          />
+        </div>
+      )}
+    </div>
   )
 }
 
