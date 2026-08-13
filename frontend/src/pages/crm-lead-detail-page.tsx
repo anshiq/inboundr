@@ -11,6 +11,7 @@ import {
   ListChecksIcon,
   MailIcon,
   MessageSquareTextIcon,
+  PenLineIcon,
   PlusIcon,
   RotateCcwIcon,
   SendIcon,
@@ -71,6 +72,7 @@ import {
   type LeadActivityType,
   type LeadStage,
   type LeadTimelineEntry,
+  type NoteAttachment,
 } from "@/lib/crm"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -277,6 +279,13 @@ export default function CrmLeadDetailPage() {
 
   const [composerTab, setComposerTab] = useState<"note" | "email">("note")
   const noteEditorRef = useRef<NoteEditorApi | null>(null)
+  const [noteModalOpen, setNoteModalOpen] = useState(false)
+  const [submittingNote, setSubmittingNote] = useState(false)
+  // Survives the modal closing, so an abandoned note is waiting on reopen.
+  const [noteDraft, setNoteDraft] = useState<{
+    html: string
+    attachments: NoteAttachment[]
+  } | null>(null)
   const [emailDraft, setEmailDraft] = useState({ to: "", subject: "", body: "", accountId: "" })
   const [submittingComposer, setSubmittingComposer] = useState(false)
 
@@ -485,42 +494,63 @@ export default function CrmLeadDetailPage() {
     }
   }
 
+  function handleNoteModalOpenChange(open: boolean) {
+    if (!open) {
+      // Closing without logging keeps the draft for the next open.
+      const payload = noteEditorRef.current?.getPayload()
+      setNoteDraft(
+        payload && !payload.isEmpty
+          ? { html: payload.bodyHtml, attachments: payload.attachments }
+          : null
+      )
+    }
+    setNoteModalOpen(open)
+  }
+
+  async function handleNoteSubmit() {
+    const noteEditor = noteEditorRef.current
+    const payload = noteEditor?.getPayload()
+    if (!payload || payload.isEmpty) {
+      toast.error("Write a note first")
+      return
+    }
+    if (noteEditor?.isUploading()) {
+      toast.error("Wait for uploads to finish")
+      return
+    }
+    setSubmittingNote(true)
+    try {
+      const entry = await addNote(id, {
+        body: payload.body,
+        bodyHtml: payload.bodyHtml,
+        attachments: payload.attachments,
+      })
+      setTimeline((prev) => [entry, ...prev])
+      setNoteDraft(null)
+      setNoteModalOpen(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to log the note")
+    } finally {
+      setSubmittingNote(false)
+    }
+  }
+
   async function handleComposerSubmit() {
     setSubmittingComposer(true)
     try {
-      if (composerTab === "note") {
-        const noteEditor = noteEditorRef.current
-        const payload = noteEditor?.getPayload()
-        if (!payload || payload.isEmpty) {
-          toast.error("Write a note first")
-          return
-        }
-        if (noteEditor?.isUploading()) {
-          toast.error("Wait for uploads to finish")
-          return
-        }
-        const entry = await addNote(id, {
-          body: payload.body,
-          bodyHtml: payload.bodyHtml,
-          attachments: payload.attachments,
-        })
-        setTimeline((prev) => [entry, ...prev])
-        noteEditor?.reset()
-      } else {
-        if (!emailDraft.subject.trim() || !emailDraft.body.trim()) {
-          toast.error("Subject and body are required")
-          return
-        }
-        const result = await sendLeadEmail(id, {
-          to: emailDraft.to.trim() || undefined,
-          subject: emailDraft.subject.trim(),
-          body: emailDraft.body,
-          accountId: emailDraft.accountId || undefined,
-        })
-        setTimeline((prev) => [result.entry, ...prev])
-        setEmailDraft((current) => ({ ...current, subject: "", body: "" }))
-        toast.success("Email sent")
+      if (!emailDraft.subject.trim() || !emailDraft.body.trim()) {
+        toast.error("Subject and body are required")
+        return
       }
+      const result = await sendLeadEmail(id, {
+        to: emailDraft.to.trim() || undefined,
+        subject: emailDraft.subject.trim(),
+        body: emailDraft.body,
+        accountId: emailDraft.accountId || undefined,
+      })
+      setTimeline((prev) => [result.entry, ...prev])
+      setEmailDraft((current) => ({ ...current, subject: "", body: "" }))
+      toast.success("Email sent")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to post to the timeline")
     } finally {
@@ -855,18 +885,20 @@ export default function CrmLeadDetailPage() {
                     </div>
 
                     <div className="mt-3 space-y-3">
-                      {/* Kept mounted while the email tab is open so a half-written note survives tab switches. */}
-                      <div className={cn(composerTab !== "note" && "hidden")}>
-                        <Suspense
-                          fallback={<Skeleton className="h-28 w-full rounded-md" />}
+                      {composerTab === "note" && (
+                        <button
+                          type="button"
+                          onClick={() => setNoteModalOpen(true)}
+                          className="flex min-h-20 w-full items-start gap-2 rounded-md border border-input bg-transparent px-3 py-2.5 text-left text-sm text-muted-foreground/60 shadow-xs transition-colors hover:border-ring/40 hover:text-muted-foreground"
                         >
-                          <NoteEditor
-                            apiRef={noteEditorRef}
-                            disabled={submittingComposer}
-                            onSubmitShortcut={() => void handleComposerSubmit()}
-                          />
-                        </Suspense>
-                      </div>
+                          <PenLineIcon className="mt-0.5 size-4 shrink-0" />
+                          <span>
+                            {noteDraft
+                              ? "Continue your draft note..."
+                              : "Log an internal note — headings, images, files..."}
+                          </span>
+                        </button>
+                      )}
                       {composerTab === "email" && (
                         <div className="space-y-2">
                           {accounts.length > 1 && (
@@ -919,18 +951,18 @@ export default function CrmLeadDetailPage() {
                           )}
                         </div>
                       )}
-                      <div className="flex justify-end">
-                        <Button size="sm" onClick={() => void handleComposerSubmit()} disabled={submittingComposer}>
-                          {submittingComposer ? (
-                            <Spinner data-icon="inline-start" />
-                          ) : composerTab === "email" ? (
-                            <SendIcon className="size-4" />
-                          ) : (
-                            <PlusIcon className="size-4" />
-                          )}
-                          {composerTab === "email" ? "Send Email" : "Log Note"}
-                        </Button>
-                      </div>
+                      {composerTab === "email" && (
+                        <div className="flex justify-end">
+                          <Button size="sm" onClick={() => void handleComposerSubmit()} disabled={submittingComposer}>
+                            {submittingComposer ? (
+                              <Spinner data-icon="inline-start" />
+                            ) : (
+                              <SendIcon className="size-4" />
+                            )}
+                            Send Email
+                          </Button>
+                        </div>
+                      )}
                     </div>
 
                     <Separator className="my-4" />
@@ -975,6 +1007,48 @@ export default function CrmLeadDetailPage() {
             <Button variant="destructive" onClick={() => void handleMarkLost()} disabled={actionPending}>
               {actionPending && <Spinner data-icon="inline-start" />}
               Mark Lost
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={noteModalOpen} onOpenChange={handleNoteModalOpenChange}>
+        <DialogContent className="flex h-[min(85vh,52rem)] flex-col gap-0 p-0 sm:max-w-3xl">
+          <DialogHeader className="border-b px-5 py-4 text-left">
+            <DialogTitle>Log Note</DialogTitle>
+            <DialogDescription>
+              {lead ? `Internal note on "${lead.title}" — ` : "Internal note — "}
+              only your team can see it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 p-4">
+            <Suspense fallback={<Skeleton className="h-full w-full rounded-md" />}>
+              <NoteEditor
+                size="large"
+                autoFocus
+                apiRef={noteEditorRef}
+                disabled={submittingNote}
+                onSubmitShortcut={() => void handleNoteSubmit()}
+                initialHtml={noteDraft?.html}
+                initialAttachments={noteDraft?.attachments}
+                className="h-full"
+              />
+            </Suspense>
+          </div>
+          <DialogFooter className="border-t px-4 py-3">
+            <p className="mr-auto hidden self-center text-[11px] text-muted-foreground sm:block">
+              Paste or drop images and files straight into the note. ⌘⏎ to log.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => handleNoteModalOpenChange(false)}
+              disabled={submittingNote}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void handleNoteSubmit()} disabled={submittingNote}>
+              {submittingNote ? <Spinner data-icon="inline-start" /> : <PlusIcon className="size-4" />}
+              Log Note
             </Button>
           </DialogFooter>
         </DialogContent>
