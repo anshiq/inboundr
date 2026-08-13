@@ -11,6 +11,13 @@ export interface ILeadTimelineEmailMeta {
   fromAddress: string | null;
 }
 
+export interface ILeadNoteAttachment {
+  key: string;
+  name: string;
+  contentType: string;
+  size: number;
+}
+
 export interface ILeadTimelineEntry extends Document<Types.ObjectId> {
   organizationId: Types.ObjectId;
   leadId: Types.ObjectId;
@@ -18,6 +25,9 @@ export interface ILeadTimelineEntry extends Document<Types.ObjectId> {
   authorUserId: string | null;
   authorName: string | null;
   body: string;
+  /** Sanitized rich-text HTML; null for plain-text and system entries. */
+  bodyHtml: string | null;
+  attachments: ILeadNoteAttachment[];
   emailMeta: ILeadTimelineEmailMeta | null;
   metadata: Record<string, unknown>;
   createdAt: Date;
@@ -47,6 +57,21 @@ const leadTimelineSchema = new Schema<ILeadTimelineEntry>(
     authorUserId: { type: String, default: null },
     authorName: { type: String, default: null, trim: true },
     body: { type: String, required: true },
+    bodyHtml: { type: String, default: null },
+    attachments: {
+      type: [
+        new Schema<ILeadNoteAttachment>(
+          {
+            key: { type: String, required: true },
+            name: { type: String, required: true, trim: true },
+            contentType: { type: String, required: true },
+            size: { type: Number, required: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: () => [],
+    },
     emailMeta: {
       type: new Schema<ILeadTimelineEmailMeta>(
         {

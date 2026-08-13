@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import {
   ArchiveIcon,
@@ -21,6 +21,8 @@ import {
 import { toast } from "sonner"
 
 import { AppLayout } from "@/components/app-layout"
+import { NoteContent } from "@/components/crm/note-content"
+import type { NoteEditorApi } from "@/components/crm/note-editor"
 import { DatePicker } from "@/components/date-picker"
 import { ErrorState } from "@/components/list-states"
 import { SiteHeader } from "@/components/site-header"
@@ -72,6 +74,9 @@ import {
 } from "@/lib/crm"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
+
+// TipTap only loads when someone actually opens a lead page.
+const NoteEditor = lazy(() => import("@/components/crm/note-editor"))
 
 const TEXTAREA_CLASS =
   "flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
@@ -246,7 +251,11 @@ function TimelineEntryRow({ entry }: { entry: LeadTimelineEntry }) {
       {entry.kind === "email_sent" && entry.emailMeta && (
         <p className="mt-1.5 text-xs font-semibold">Subject: {entry.emailMeta.subject}</p>
       )}
-      <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed">{entry.body}</p>
+      {entry.bodyHtml ? (
+        <NoteContent html={entry.bodyHtml} attachments={entry.attachments} className="mt-1.5" />
+      ) : (
+        <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed">{entry.body}</p>
+      )}
     </div>
   )
 }
@@ -267,7 +276,7 @@ export default function CrmLeadDetailPage() {
   const [saving, setSaving] = useState(false)
 
   const [composerTab, setComposerTab] = useState<"note" | "email">("note")
-  const [noteDraft, setNoteDraft] = useState("")
+  const noteEditorRef = useRef<NoteEditorApi | null>(null)
   const [emailDraft, setEmailDraft] = useState({ to: "", subject: "", body: "", accountId: "" })
   const [submittingComposer, setSubmittingComposer] = useState(false)
 
@@ -480,13 +489,23 @@ export default function CrmLeadDetailPage() {
     setSubmittingComposer(true)
     try {
       if (composerTab === "note") {
-        if (!noteDraft.trim()) {
+        const noteEditor = noteEditorRef.current
+        const payload = noteEditor?.getPayload()
+        if (!payload || payload.isEmpty) {
           toast.error("Write a note first")
           return
         }
-        const entry = await addNote(id, noteDraft.trim())
+        if (noteEditor?.isUploading()) {
+          toast.error("Wait for uploads to finish")
+          return
+        }
+        const entry = await addNote(id, {
+          body: payload.body,
+          bodyHtml: payload.bodyHtml,
+          attachments: payload.attachments,
+        })
         setTimeline((prev) => [entry, ...prev])
-        setNoteDraft("")
+        noteEditor?.reset()
       } else {
         if (!emailDraft.subject.trim() || !emailDraft.body.trim()) {
           toast.error("Subject and body are required")
@@ -836,15 +855,19 @@ export default function CrmLeadDetailPage() {
                     </div>
 
                     <div className="mt-3 space-y-3">
-                      {composerTab === "note" ? (
-                        <textarea
-                          value={noteDraft}
-                          onChange={(event) => setNoteDraft(event.target.value)}
-                          placeholder="Log an internal note..."
-                          rows={3}
-                          className={TEXTAREA_CLASS}
-                        />
-                      ) : (
+                      {/* Kept mounted while the email tab is open so a half-written note survives tab switches. */}
+                      <div className={cn(composerTab !== "note" && "hidden")}>
+                        <Suspense
+                          fallback={<Skeleton className="h-28 w-full rounded-md" />}
+                        >
+                          <NoteEditor
+                            apiRef={noteEditorRef}
+                            disabled={submittingComposer}
+                            onSubmitShortcut={() => void handleComposerSubmit()}
+                          />
+                        </Suspense>
+                      </div>
+                      {composerTab === "email" && (
                         <div className="space-y-2">
                           {accounts.length > 1 && (
                             <Select
