@@ -188,6 +188,12 @@ export interface NoteEditorProps {
   onSubmitShortcut?: () => void
   /** Lets the composer read/clear the note without owning the editor instance. */
   apiRef: React.RefObject<NoteEditorApi | null>
+  /** "large" fills the parent's height for a modal / full-page writing surface. */
+  size?: "compact" | "large"
+  autoFocus?: boolean
+  /** Restores a previously abandoned draft when the editor remounts. */
+  initialHtml?: string
+  initialAttachments?: NoteAttachment[]
   className?: string
 }
 
@@ -196,9 +202,13 @@ export function NoteEditor({
   placeholder = "Log an internal note... (type '#' for a heading, '-' for a list)",
   onSubmitShortcut,
   apiRef,
+  size = "compact",
+  autoFocus = false,
+  initialHtml,
+  initialAttachments,
   className,
 }: NoteEditorProps) {
-  const [attachments, setAttachments] = useState<NoteAttachment[]>([])
+  const [attachments, setAttachments] = useState<NoteAttachment[]>(initialAttachments ?? [])
   const [uploadingCount, setUploadingCount] = useState(0)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -223,12 +233,16 @@ export function NoteEditor({
       }),
       NoteImage.configure({ inline: false, allowBase64: false }),
     ],
-    content: "",
+    content: initialHtml ?? "",
     editable: !disabled,
+    autofocus: autoFocus ? "end" : false,
     shouldRerenderOnTransaction: true,
     editorProps: {
       attributes: {
-        class: "rich-note-content min-h-20 focus:outline-none",
+        class: cn(
+          "rich-note-content focus:outline-none",
+          size === "large" ? "min-h-48" : "min-h-20"
+        ),
         "aria-label": "Note body",
       },
       handleKeyDown: (_view, event) => {
@@ -341,7 +355,13 @@ export function NoteEditor({
   }
 
   return (
-    <div className={cn("rounded-md border border-input shadow-xs", className)}>
+    <div
+      className={cn(
+        "rounded-md border border-input shadow-xs",
+        size === "large" && "flex min-h-0 flex-col",
+        className
+      )}
+    >
       <div className="flex flex-wrap items-center gap-0.5 border-b border-border/40 px-1.5 py-1">
         <HeadingDropdown editor={editor} disabled={disabled} />
 
@@ -430,13 +450,33 @@ export function NoteEditor({
         )}
       </div>
 
-      <div className="relative max-h-80 overflow-y-auto">
+      <div
+        className={cn(
+          "relative overflow-y-auto",
+          size === "large" ? "min-h-0 flex-1 cursor-text" : "max-h-80"
+        )}
+        onClick={(event) => {
+          // In the large layout the document is usually shorter than the pane;
+          // clicking the empty space below it should land the cursor at the end.
+          if (!(event.target as HTMLElement).closest(".ProseMirror")) {
+            editor.chain().focus("end").run()
+          }
+        }}
+      >
         {editor.isEmpty && (
-          <p className="pointer-events-none absolute left-3 top-2.5 pr-3 text-[13px] text-muted-foreground/50">
+          <p
+            className={cn(
+              "pointer-events-none absolute left-3 top-2.5 pr-3 text-muted-foreground/50",
+              size === "large" ? "left-4 top-3.5 text-sm" : "text-[13px]"
+            )}
+          >
             {placeholder}
           </p>
         )}
-        <EditorContent editor={editor} className="px-3 py-2.5 text-[13px]" />
+        <EditorContent
+          editor={editor}
+          className={cn(size === "large" ? "px-4 py-3.5 text-sm" : "px-3 py-2.5 text-[13px]")}
+        />
       </div>
 
       {attachments.length > 0 && (
