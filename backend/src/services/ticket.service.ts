@@ -505,7 +505,7 @@ export async function linkTicketCustomer(input: {
   const ticket = await Ticket.findOneAndUpdate(
     { _id: input.ticketId, organizationId: input.organizationId },
     { customerId: input.customerId ? new mongoose.Types.ObjectId(input.customerId) : null },
-    { new: true }
+    { returnDocument: "after" }
   )
     .populate("customerId")
     .populate("tagIds")
@@ -568,7 +568,7 @@ export async function resolveTicket(input: {
       aiMode: "paused",
       lastMessageAt: now,
     },
-    { new: true }
+    { returnDocument: "after" }
   ).lean();
   if (!ticket) return null;
   try {
@@ -592,7 +592,7 @@ export async function reopenTicket(input: {
   const ticket = await Ticket.findOneAndUpdate(
     { _id: input.ticketId, organizationId: input.organizationId },
     { status: "open", resolvedAt: null, resolution: null, lastMessageAt: now },
-    { new: true }
+    { returnDocument: "after" }
   ).lean();
   if (!ticket) return null;
   const fresh = await Ticket.findById(ticket._id)
@@ -611,7 +611,7 @@ export async function setTicketArchived(input: {
   const ticket = await Ticket.findOneAndUpdate(
     { _id: input.ticketId, organizationId: input.organizationId },
     { isArchived: input.archived, archivedAt: input.archived ? new Date() : null },
-    { new: true }
+    { returnDocument: "after" }
   )
     .populate("customerId")
     .populate("tagIds")
@@ -641,7 +641,7 @@ export async function updateTicketTags(input: {
   const ticket = await Ticket.findOneAndUpdate(
     { _id: input.ticketId, organizationId: input.organizationId },
     { tagIds: validIds },
-    { new: true }
+    { returnDocument: "after" }
   )
     .populate("customerId")
     .populate("tagIds")

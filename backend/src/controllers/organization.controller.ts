@@ -995,7 +995,7 @@ export async function cancelOrganizationInvitation(
     const invitation = await OrganizationInvitation.findOneAndUpdate(
       { _id: id, organizationId: organization._id, status: "pending" },
       { $set: { status: "cancelled", cancelledAt: new Date() } },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     if (!invitation) {
@@ -1044,7 +1044,7 @@ export async function updateOrganizationMemberRole(
     const member = await OrganizationMember.findOneAndUpdate(
       { _id: id, organizationId: organization._id },
       { $set: { role } },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     res.json({ member });

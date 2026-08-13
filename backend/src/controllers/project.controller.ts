@@ -720,7 +720,7 @@ export const updateProjectTask = async (req: Request, res: Response): Promise<vo
         isArchived: { $ne: true },
       },
       input,
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
     if (!task) {
       res.status(404).json({ error: "Task not found" });
@@ -809,7 +809,7 @@ export const archiveProjectTask = async (req: Request, res: Response): Promise<v
         isArchived: { $ne: true },
       },
       { isArchived: true, archivedAt: new Date() },
-      { new: true }
+      { returnDocument: "after" }
     );
     if (!task) {
       res.status(404).json({ error: "Task not found" });

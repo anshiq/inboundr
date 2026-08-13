@@ -196,7 +196,7 @@ export async function markNotificationRead(input: {
       recipientUserId: input.userId,
     },
     { $set: { readAt: input.read ? new Date() : null } },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (!notification) return null;
 

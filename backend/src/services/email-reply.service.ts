@@ -364,7 +364,7 @@ export async function persistOutboundEmail({
   }
 
   try {
-    const updated = await Email.findByIdAndUpdate(draft._id, update, { new: true });
+    const updated = await Email.findByIdAndUpdate(draft._id, update, { returnDocument: "after" });
     return updated ?? draft;
   } catch (err) {
     // A thread sync running in the window between sending and this update will

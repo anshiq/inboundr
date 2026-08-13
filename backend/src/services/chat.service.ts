@@ -151,7 +151,7 @@ export async function updateChatThread(
   const thread = await ChatThread.findOneAndUpdate(
     { _id: threadId, userId },
     { ...patch, updatedAt: new Date() },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   return Boolean(thread);
@@ -244,7 +244,7 @@ export async function saveChatMessage(
       format: message.format,
       content: message.content,
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   );
   thread.updatedAt = new Date();
   await thread.save();

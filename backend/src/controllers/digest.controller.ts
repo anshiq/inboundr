@@ -187,7 +187,7 @@ export async function updateDigestPreferences(
         timezone,
         sendHourUtc,
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
     ).lean();
     const members = await listDigestMembers(organization._id);
 

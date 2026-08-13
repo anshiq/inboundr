@@ -89,7 +89,7 @@ export async function getAssetSettings(
   return AssetSettings.findOneAndUpdate(
     { organizationId },
     { $setOnInsert: { codePrefix: DEFAULT_ASSET_CODE_PREFIX, nextSequence: 1 } },
-    { new: true, upsert: true }
+    { returnDocument: "after", upsert: true }
   );
 }
 
@@ -108,7 +108,7 @@ export async function updateAssetSettings(
   return AssetSettings.findOneAndUpdate(
     { organizationId },
     { $set: { codePrefix } },
-    { new: true, upsert: true }
+    { returnDocument: "after", upsert: true }
   );
 }
 
@@ -122,7 +122,7 @@ async function nextAssetCodes(
       $inc: { nextSequence: count },
       $setOnInsert: { codePrefix: DEFAULT_ASSET_CODE_PREFIX },
     },
-    { new: true, upsert: true }
+    { returnDocument: "after", upsert: true }
   );
 
   const firstSequence = settings.nextSequence - count;

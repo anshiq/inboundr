@@ -653,7 +653,7 @@ export async function updateFeedbackStatus(
   const feedback = await Feedback.findByIdAndUpdate(
     feedbackId,
     { $set: { status } },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (!feedback) return null;
 

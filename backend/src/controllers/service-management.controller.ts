@@ -1008,7 +1008,7 @@ export async function updateServiceSettings(req: Request, res: Response): Promis
           statuses: activeStatuses,
         },
       },
-      { new: true }
+      { returnDocument: "after" }
     );
     await writeServiceActivity({
       organizationId,
@@ -1215,7 +1215,7 @@ export async function updateCustomerSite(req: Request, res: Response): Promise<v
         ...(req.body?.notes !== undefined ? { notes: text(req.body.notes) } : {}),
         ...(typeof req.body?.isArchived === "boolean" ? { isArchived: req.body.isArchived } : {}),
       } },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
     if (!item) {
       res.status(404).json({ error: "Customer site not found" });
@@ -1377,7 +1377,7 @@ export async function updateInstalledEquipment(req: Request, res: Response): Pro
         ...(req.body?.notes !== undefined ? { notes: text(req.body.notes) } : {}),
         ...(typeof req.body?.isArchived === "boolean" ? { isArchived: req.body.isArchived } : {}),
       },
-    }, { new: true, runValidators: true });
+    }, { returnDocument: "after", runValidators: true });
     await writeServiceActivity({
       organizationId,
       action: "installed_equipment_updated",

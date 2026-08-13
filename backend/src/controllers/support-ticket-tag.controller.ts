@@ -133,7 +133,7 @@ export async function updateTicketTag(req: Request, res: Response): Promise<void
     const tag = await SupportTicketTag.findOneAndUpdate(
       { _id: id, organizationId: orgReq.organization._id },
       update,
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
     if (!tag) {
       res.status(404).json({ error: "Ticket tag not found" });

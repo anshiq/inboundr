@@ -96,7 +96,7 @@ export async function updateSupportTemplate(req: Request, res: Response): Promis
     const template = await SupportTemplate.findOneAndUpdate(
       { _id: id, organizationId: orgReq.organization._id },
       update,
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
 
     if (!template) {

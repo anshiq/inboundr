@@ -28,7 +28,7 @@ export const archiveCustomer = async (
     const customer = await Customer.findOneAndUpdate(
       { _id: id, organizationId: organization._id },
       { isArchived: true },
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
 
     if (!customer) {
@@ -330,7 +330,7 @@ export const updateCustomer = async (
       { _id: id, organizationId: organization._id },
       update,
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       }
     ).lean();

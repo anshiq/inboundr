@@ -26,7 +26,7 @@ async function main(): Promise<void> {
           name: process.env.ORGANIZATION_NAME || "My Organization",
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
     );
 
     const organizationId = organization._id;

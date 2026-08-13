@@ -59,7 +59,7 @@ export async function gmailCallback(req: Request, res: Response): Promise<void> 
         status: "connected",
         errorMessage: null,
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
     );
 
     await startWatch(account);
@@ -113,7 +113,7 @@ export async function updateGmailSignature(
         organizationId: organization._id,
       },
       { signatureHtml: sanitized },
-      { new: true }
+      { returnDocument: "after" }
     )
       .select("-accessToken -refreshToken")
       .lean();

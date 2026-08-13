@@ -319,7 +319,7 @@ export async function endSupportSession(req: Request, res: ExpressResponse): Pro
       };
     }
 
-    let updatedTicket = await Ticket.findByIdAndUpdate(ticket._id, update, { new: true }).lean();
+    let updatedTicket = await Ticket.findByIdAndUpdate(ticket._id, update, { returnDocument: "after" }).lean();
     if (!updatedTicket) {
       res.status(404).json({ error: "Chat session not found" });
       return;
