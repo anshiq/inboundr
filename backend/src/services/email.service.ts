@@ -34,7 +34,7 @@ function isSelfSentEmail(
   return fromAddress === accountAddress || (labels.has("SENT") && !labels.has("INBOX"));
 }
 
-async function canProcessQuotationInbox(account: IGmailAccount): Promise<boolean> {
+export async function canProcessQuotationInbox(account: IGmailAccount): Promise<boolean> {
   if (!account.organizationId) return false;
 
   const organization = await Organization.findById(account.organizationId)
@@ -44,15 +44,67 @@ async function canProcessQuotationInbox(account: IGmailAccount): Promise<boolean
   return Boolean(organization && hasEffectiveFeature(organization, "rfq"));
 }
 
+/**
+ * Fetches a single Gmail message and stores it, kicking off RFQ processing for
+ * newly saved inbound mail. Idempotent: already-stored, self-sent and
+ * duplicate messages are no-ops, so callers may safely retry after failures.
+ * Throws when ingestion fails so callers can decide whether to advance their
+ * sync cursor.
+ */
+export async function ingestInboxMessage(
+  account: IGmailAccount,
+  messageId: string
+): Promise<boolean> {
+  const exists = await Email.exists({
+    gmailAccountId: account._id,
+    messageId,
+  }).lean();
+  if (exists) return false;
+
+  const parsed = await getEmailById(account, messageId);
+  if (isSelfSentEmail(account, parsed)) {
+    console.log(
+      `Skipping self-sent Gmail message ${messageId} from ${parsed.from}`
+    );
+    return false;
+  }
+
+  const saved = await saveEmail(account, parsed);
+  if (!saved) return false;
+  console.log(`Saved email: ${parsed.subject} from ${parsed.from}`);
+
+  const emailDoc = await Email.findOne({
+    gmailAccountId: account._id,
+    messageId,
+  }).lean();
+  if (emailDoc && hasRFQProcessableContent(emailDoc)) {
+    const body = await buildRFQProcessingInput(account, emailDoc);
+    processEmailForRFQ(
+      emailDoc._id.toString(),
+      body,
+      messageId,
+      account.userId,
+      account._id.toString(),
+      account.organizationId?.toString(),
+      { threadId: emailDoc.threadId ?? null }
+    ).catch((err) =>
+      console.error(`RFQ processing failed for ${messageId}:`, err)
+    );
+  }
+
+  return true;
+}
+
 export async function processHistoryUpdate(
   account: IGmailAccount,
   newHistoryId: string
 ): Promise<void> {
   if (!(await canProcessQuotationInbox(account))) {
+    // Keep the stored cursor so the backlog is ingested if the feature is
+    // re-enabled; advancing here would silently discard the mail.
     console.warn(
       `Skipping Gmail history update for ${account.emailAddress}: Quotations feature is disabled`
     );
-    await GmailAccount.updateOne({ _id: account._id }, { historyId: newHistoryId });
     return;
   }
 
@@ -95,55 +147,38 @@ export async function processHistoryUpdate(
       pageToken = res.data.nextPageToken ?? undefined;
     } while (pageToken);
 
+    let failedCount = 0;
     for (const messageId of messageIds) {
-      const exists = await Email.exists({
-        gmailAccountId: account._id,
-        messageId,
-      }).lean();
-      if (exists) continue;
-
       try {
-        const parsed = await getEmailById(account, messageId);
-        if (isSelfSentEmail(account, parsed)) {
-          console.log(
-            `Skipping self-sent Gmail message ${messageId} from ${parsed.from}`
-          );
-          continue;
-        }
-
-        const saved = await saveEmail(account, parsed);
-        console.log(`Saved email: ${parsed.subject} from ${parsed.from}`);
-
-        if (saved) {
-          const emailDoc = await Email.findOne({
-            gmailAccountId: account._id,
-            messageId,
-          }).lean();
-          if (emailDoc && hasRFQProcessableContent(emailDoc)) {
-            const body = await buildRFQProcessingInput(account, emailDoc);
-            processEmailForRFQ(
-              emailDoc._id.toString(),
-              body,
-              messageId,
-              account.userId,
-              account._id.toString(),
-              account.organizationId?.toString(),
-              { threadId: emailDoc.threadId ?? null }
-            ).catch((err) =>
-              console.error(`RFQ processing failed for ${messageId}:`, err)
-            );
-          }
-        }
+        await ingestInboxMessage(account, messageId);
       } catch (err) {
+        failedCount++;
         console.error(`Failed to process message ${messageId}:`, err);
       }
     }
+
+    // Pub/Sub has already been acked, so advancing the cursor past a failed
+    // message would drop it permanently. Keep the old cursor instead: the next
+    // notification (or the reconciliation job) retries from it, and ingestion
+    // is idempotent so already-saved messages are skipped.
+    if (failedCount > 0) {
+      console.warn(
+        `${failedCount} message(s) failed for ${account.emailAddress}; keeping historyId ${storedHistoryId} for retry`
+      );
+      return;
+    }
   } catch (err: any) {
     if (err.code === 404) {
-      console.warn(
-        "History ID too old, fetching recent messages instead"
-      );
-      await fetchRecentMessages(account);
+      console.warn("History ID too old, backfilling recent messages instead");
+      const { failed } = await backfillInboxMessages(account, "7d");
+      if (failed > 0) {
+        // Leave the dead cursor in place: the next notification will 404 again
+        // and re-run the (idempotent) backfill, retrying the failures.
+        console.warn(
+          `Backfill for ${account.emailAddress} had ${failed} failure(s); keeping historyId for retry`
+        );
+        return;
+      }
     } else {
       throw err;
     }
@@ -170,6 +205,27 @@ export async function getEmailById(
   return parseHeadersToEmail(message, payload);
 }
 
+/**
+ * A missing or malformed Date header would fail the required Date cast on the
+ * Email model and drop the message, so fall back to Gmail's internalDate
+ * (delivery time in epoch ms) and finally to now.
+ */
+function resolveMessageDate(
+  message: gmail_v1.Schema$Message,
+  dateHeader: string
+): string {
+  if (dateHeader && !Number.isNaN(new Date(dateHeader).getTime())) {
+    return dateHeader;
+  }
+
+  const internal = Number(message.internalDate);
+  if (Number.isFinite(internal) && internal > 0) {
+    return new Date(internal).toISOString();
+  }
+
+  return new Date().toISOString();
+}
+
 function parseHeadersToEmail(
   message: gmail_v1.Schema$Message,
   parsed: PayloadParseResult
@@ -191,7 +247,7 @@ function parseHeadersToEmail(
     cc: getHeader("Cc") || null,
     bcc: getHeader("Bcc") || null,
     subject: getHeader("Subject"),
-    date: getHeader("Date"),
+    date: resolveMessageDate(message, getHeader("Date")),
     bodyText: parsed.bodyText,
     bodyHtml: parsed.bodyHtml,
     snippet: message.snippet ?? null,
@@ -419,56 +475,58 @@ export async function updateEmailStatus(
   );
 }
 
-async function fetchRecentMessages(account: IGmailAccount): Promise<void> {
+const BACKFILL_PAGE_SIZE = 100;
+// Bounds a single pass on very busy mailboxes; anything left over is picked up
+// by the next pass since ingestion is idempotent.
+const BACKFILL_MAX_MESSAGES = 1000;
+
+export interface InboxBackfillResult {
+  scanned: number;
+  ingested: number;
+  failed: number;
+}
+
+/**
+ * Lists recent INBOX messages from Gmail and ingests any that are missing
+ * locally. Serves as the recovery path when the history cursor has expired and
+ * as the periodic reconciliation safety net (which also catches mail moved to
+ * the inbox from Spam or a filter, invisible to the messageAdded watch).
+ */
+export async function backfillInboxMessages(
+  account: IGmailAccount,
+  newerThan: string
+): Promise<InboxBackfillResult> {
   const gmail = await getGmailClientForAccount(account);
 
-  const res = await gmail.users.messages.list({
-    userId: "me",
-    labelIds: ["INBOX"],
-    maxResults: 10,
-  });
+  const result: InboxBackfillResult = { scanned: 0, ingested: 0, failed: 0 };
+  let pageToken: string | undefined = undefined;
 
-  for (const msg of res.data.messages ?? []) {
-    if (!msg.id) continue;
-    const exists = await Email.exists({
-      gmailAccountId: account._id,
-      messageId: msg.id,
-    }).lean();
-    if (exists) continue;
+  do {
+    const res: { data: gmail_v1.Schema$ListMessagesResponse } =
+      await gmail.users.messages.list({
+        userId: "me",
+        labelIds: ["INBOX"],
+        q: `newer_than:${newerThan}`,
+        maxResults: BACKFILL_PAGE_SIZE,
+        pageToken,
+      });
 
-    try {
-      const parsed = await getEmailById(account, msg.id);
-      if (isSelfSentEmail(account, parsed)) {
-        console.log(
-          `Skipping self-sent recent Gmail message ${msg.id} from ${parsed.from}`
-        );
-        continue;
-      }
+    for (const msg of res.data.messages ?? []) {
+      if (!msg.id) continue;
+      result.scanned++;
 
-      const saved = await saveEmail(account, parsed);
-      console.log(`Saved recent email: ${parsed.subject} from ${parsed.from}`);
-      if (saved) {
-        const emailDoc = await Email.findOne({
-          gmailAccountId: account._id,
-          messageId: msg.id,
-        }).lean();
-        if (emailDoc && hasRFQProcessableContent(emailDoc)) {
-          const body = await buildRFQProcessingInput(account, emailDoc);
-          processEmailForRFQ(
-            emailDoc._id.toString(),
-            body,
-            msg.id,
-            account.userId,
-            account._id.toString(),
-            account.organizationId?.toString(),
-            { threadId: emailDoc.threadId ?? null }
-          ).catch((err) =>
-            console.error(`RFQ processing failed for ${msg.id}:`, err)
-          );
+      try {
+        if (await ingestInboxMessage(account, msg.id)) {
+          result.ingested++;
         }
+      } catch (err) {
+        result.failed++;
+        console.error(`Failed to backfill message ${msg.id}:`, err);
       }
-    } catch (err) {
-      console.error(`Failed to fetch message ${msg.id}:`, err);
     }
-  }
+
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken && result.scanned < BACKFILL_MAX_MESSAGES);
+
+  return result;
 }
