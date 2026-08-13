@@ -58,6 +58,13 @@ export interface BoardLead extends Lead {
   nextActivity: Pick<LeadActivity, "_id" | "type" | "summary" | "dueDate"> | null
 }
 
+export interface NoteAttachment {
+  key: string
+  name: string
+  contentType: string
+  size: number
+}
+
 export interface LeadTimelineEntry {
   _id: string
   leadId: string
@@ -65,6 +72,9 @@ export interface LeadTimelineEntry {
   authorUserId: string | null
   authorName: string | null
   body: string
+  /** Sanitized rich-text HTML; absent on plain-text and pre-rich-notes entries. */
+  bodyHtml?: string | null
+  attachments?: NoteAttachment[]
   emailMeta: {
     to: string
     subject: string
@@ -223,10 +233,13 @@ export function listTimeline(leadId: string) {
   return api<{ entries: LeadTimelineEntry[] }>(`/leads/${leadId}/timeline`)
 }
 
-export function addNote(leadId: string, body: string) {
+export function addNote(
+  leadId: string,
+  payload: { body?: string; bodyHtml?: string; attachments?: NoteAttachment[] }
+) {
   return api<LeadTimelineEntry>(`/leads/${leadId}/notes`, {
     method: "POST",
-    body: JSON.stringify({ body }),
+    body: JSON.stringify(payload),
   })
 }
 

@@ -11,8 +11,10 @@ import {
 import { LeadStage } from "../models/lead-stage.model";
 import { LeadTimelineEntry } from "../models/lead-timeline.model";
 import type { OrganizationRequest } from "../middleware/auth.middleware";
-import { getOrCreateLeadStages, recordLeadTimeline } from "../services/crm.service";
-import { sendStandaloneEmail } from "../services/gmail-send.service";
+import type { ILeadNoteAttachment } from "../models/lead-timeline.model";
+import { getOrCreateLeadStages, recordLeadTimeline, sanitizeNoteHtml } from "../services/crm.service";
+import { htmlToPlainText, sendStandaloneEmail } from "../services/gmail-send.service";
+import { keyBelongsToPrefix } from "../services/storage.service";
 
 const LEAD_SEARCH_FIELDS = ["title", "contactName", "company", "email", "phone"] as const;
 
@@ -728,23 +730,82 @@ export const listTimeline = async (req: Request, res: Response): Promise<void> =
   }
 };
 
+const NOTE_TEXT_MAX_LENGTH = 10000;
+const NOTE_HTML_MAX_LENGTH = 200_000;
+const NOTE_MAX_ATTACHMENTS = 10;
+
+function normalizeNoteAttachments(
+  value: unknown,
+  organizationId: string
+): ILeadNoteAttachment[] | null {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.length > NOTE_MAX_ATTACHMENTS) return null;
+
+  const attachments: ILeadNoteAttachment[] = [];
+  for (const item of value) {
+    const key = optionalTrimmed((item as Record<string, unknown>)?.key);
+    const name = optionalTrimmed((item as Record<string, unknown>)?.name);
+    const contentType = optionalTrimmed((item as Record<string, unknown>)?.contentType);
+    const size = Number((item as Record<string, unknown>)?.size ?? 0);
+    if (!key || !name || !contentType || !Number.isFinite(size) || size <= 0) return null;
+    // Only files the caller's own organization uploaded through the crm scope
+    // can be referenced, otherwise a note could expose another tenant's files.
+    if (!keyBelongsToPrefix(key, ["crm", organizationId])) return null;
+    attachments.push({
+      key,
+      name: name.slice(0, 200),
+      contentType: contentType.slice(0, 120),
+      size,
+    });
+  }
+  return attachments;
+}
+
 export const addNote = async (req: Request, res: Response): Promise<void> => {
   try {
     const orgReq = req as OrganizationRequest;
     const lead = await findLead(req, res);
     if (!lead) return;
 
-    const body = optionalTrimmed(req.body?.body);
-    if (!body) {
+    const rawHtml = optionalTrimmed(req.body?.bodyHtml);
+    if (rawHtml && rawHtml.length > NOTE_HTML_MAX_LENGTH) {
+      res.status(400).json({ error: "Note is too long" });
+      return;
+    }
+
+    const attachments = normalizeNoteAttachments(
+      req.body?.attachments,
+      String(orgReq.organization._id)
+    );
+    if (attachments === null) {
+      res.status(400).json({ error: "Invalid note attachments" });
+      return;
+    }
+
+    const bodyHtml = rawHtml ? sanitizeNoteHtml(rawHtml) : null;
+    // The plain-text body is derived server-side (not trusted from the client)
+    // because it doubles as the fallback rendering for older app versions.
+    const bodyText = bodyHtml
+      ? htmlToPlainText(bodyHtml)
+      : (optionalTrimmed(req.body?.body) ?? "");
+    const hasInlineImage = bodyHtml ? /<img\s/i.test(bodyHtml) : false;
+
+    if (!bodyText && !hasInlineImage && attachments.length === 0) {
       res.status(400).json({ error: "Note body is required" });
       return;
     }
+
+    const fallbackBody = hasInlineImage
+      ? "(image)"
+      : `(${attachments.length} attachment${attachments.length === 1 ? "" : "s"})`;
 
     const entry = await recordLeadTimeline({
       organizationId: orgReq.organization._id,
       leadId: lead._id,
       kind: "note",
-      body: body.slice(0, 10000),
+      body: (bodyText || fallbackBody).slice(0, NOTE_TEXT_MAX_LENGTH),
+      bodyHtml,
+      attachments,
       authorUserId: orgReq.user.id,
       authorName: orgReq.user.name ?? null,
     });

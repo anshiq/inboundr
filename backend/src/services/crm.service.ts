@@ -1,8 +1,10 @@
 import type { Types } from "mongoose";
+import sanitizeHtml from "sanitize-html";
 import { Lead, type ILead, type LeadSource } from "../models/lead.model";
 import { LeadStage, type ILeadStage } from "../models/lead-stage.model";
 import {
   LeadTimelineEntry,
+  type ILeadNoteAttachment,
   type ILeadTimelineEntry,
   type ILeadTimelineEmailMeta,
   type LeadTimelineKind,
@@ -94,6 +96,8 @@ export async function recordLeadTimeline(input: {
   leadId: Types.ObjectId;
   kind: LeadTimelineKind;
   body: string;
+  bodyHtml?: string | null;
+  attachments?: ILeadNoteAttachment[];
   authorUserId?: string | null;
   authorName?: string | null;
   emailMeta?: ILeadTimelineEmailMeta | null;
@@ -104,9 +108,36 @@ export async function recordLeadTimeline(input: {
     leadId: input.leadId,
     kind: input.kind,
     body: input.body,
+    bodyHtml: input.bodyHtml ?? null,
+    attachments: input.attachments ?? [],
     authorUserId: input.authorUserId ?? null,
     authorName: input.authorName ?? null,
     emailMeta: input.emailMeta ?? null,
     metadata: input.metadata ?? {},
+  });
+}
+
+/**
+ * The note editor's schema is not a security boundary — the HTML arrives over
+ * HTTP and is later rendered for every teammate viewing the lead. Restrict it
+ * to what the TipTap note toolbar can actually emit. Uploaded images carry a
+ * `data-key` storage reference that the client resolves to a short-lived
+ * signed URL at render time, so keys must survive sanitization.
+ */
+export function sanitizeNoteHtml(html: string): string {
+  return sanitizeHtml(html, {
+    allowedTags: [
+      "p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a",
+      "ul", "ol", "li", "blockquote", "code", "pre", "h1", "h2", "h3", "hr", "img",
+    ],
+    allowedAttributes: {
+      a: ["href", "target", "rel"],
+      img: ["src", "alt", "width", "height", "data-key"],
+    },
+    allowedSchemes: ["http", "https", "mailto", "tel"],
+    allowedSchemesByTag: { img: ["http", "https"] },
+    transformTags: {
+      a: sanitizeHtml.simpleTransform("a", { target: "_blank", rel: "noopener noreferrer" }),
+    },
   });
 }
