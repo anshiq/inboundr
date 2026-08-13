@@ -70,6 +70,7 @@ import {
 } from "./services/gmail-watcher.service";
 import { startCallRecordingCron } from "./jobs/call-recording-cron";
 import { startDigestCron } from "./jobs/digest-cron";
+import { startEmailReconciliationCron } from "./jobs/email-reconciliation-cron";
 import { startPaymentReminderCron } from "./jobs/payment-reminder-cron";
 import { startCrmActivityReminderCron } from "./jobs/crm-activity-reminder-cron";
 import { startRecruitmentRankingWorker } from "./services/recruitment-ranking.service";
@@ -190,6 +191,7 @@ export async function initializeServices(): Promise<void> {
   );
 
   startDigestCron();
+  startEmailReconciliationCron();
   startPaymentReminderCron();
   startCrmActivityReminderCron();
   startCallRecordingCron();

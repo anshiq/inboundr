@@ -5,6 +5,7 @@ import {
   type IGmailAccount,
 } from "../models/gmail-account.model";
 import { Organization } from "../models/organization.model";
+import { processHistoryUpdate } from "./email.service";
 import { hasEffectiveFeature } from "./entitlement.service";
 
 const SIX_DAYS_MS = 6 * 24 * 60 * 60 * 1000;
@@ -56,10 +57,14 @@ export async function startWatch(account: IGmailAccount): Promise<void> {
     throw new Error("Gmail watch response missing historyId");
   }
 
+  // Overwriting an existing cursor with the watch's current historyId would
+  // silently skip everything that arrived since the last processed
+  // notification (e.g. while the server was down or between renewals). Only
+  // initialize the cursor for accounts that have none, and catch up the rest.
   await GmailAccount.updateOne(
     { _id: account._id },
     {
-      historyId,
+      ...(account.historyId ? {} : { historyId }),
       watchExpiration: expiration ? new Date(Number(expiration)) : null,
       status: "connected",
       errorMessage: null,
@@ -69,6 +74,19 @@ export async function startWatch(account: IGmailAccount): Promise<void> {
   console.log(
     `Gmail watch registered for ${account.emailAddress}, historyId: ${historyId}, expires: ${expiration}`
   );
+
+  if (account.historyId) {
+    try {
+      await processHistoryUpdate(account, historyId);
+    } catch (err) {
+      // The watch itself is registered; a failed catch-up leaves the cursor
+      // untouched so the next notification retries the same range.
+      console.error(
+        `Gmail catch-up failed for ${account.emailAddress}:`,
+        err
+      );
+    }
+  }
 }
 
 export async function stopWatch(account: IGmailAccount): Promise<void> {
