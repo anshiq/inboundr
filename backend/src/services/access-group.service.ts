@@ -79,7 +79,7 @@ export async function ensureDefaultAccessGroups(
           status: "active",
         },
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true, session }
+      { returnDocument: "after", upsert: true, setDefaultsOnInsert: true, session }
     ),
     AccessGroup.findOneAndUpdate(
       { organizationId: orgId, defaultKey: "members" },
@@ -98,7 +98,7 @@ export async function ensureDefaultAccessGroups(
           moduleAccess: { $each: DEFAULT_MEMBERS_MODULES },
         },
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true, session }
+      { returnDocument: "after", upsert: true, setDefaultsOnInsert: true, session }
     ),
   ]);
 

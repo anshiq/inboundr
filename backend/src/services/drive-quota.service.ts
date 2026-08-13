@@ -65,6 +65,6 @@ export async function setDriveQuotaLimit(organizationId: Types.ObjectId, limitBy
   return DriveQuota.findOneAndUpdate(
     { organizationId },
     { $set: { limitBytes: Math.max(0, Math.floor(limitBytes)) } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   ).orFail();
 }

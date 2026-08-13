@@ -34,7 +34,7 @@ export const archiveRFQ = async (
     const rfq = await RFQ.findOneAndUpdate(
       { _id: req.params.id, userId: authReq.user.id, organizationId: organization._id },
       { isArchived: true },
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
 
     if (!rfq) {
@@ -779,7 +779,7 @@ export const setRFQQuoteNumber = async (
           processedAt: new Date(),
         },
       },
-      { new: true }
+      { returnDocument: "after" }
     )
       .populate("emailId", "subject from date snippet status")
       .lean();
@@ -1050,7 +1050,7 @@ export const generateQuote = async (
         gmailMessageId: null,
         sendErrorMessage: null,
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
     ).lean();
 
     if (!wasDraft) {
@@ -1195,7 +1195,7 @@ export const sendQuoteReply = async (
           gmailMessageId,
           sendErrorMessage: null,
         },
-        { new: true }
+        { returnDocument: "after" }
       ).lean();
 
       // Store the quote as an outbound message so it shows in the inbox thread
@@ -1224,7 +1224,7 @@ export const sendQuoteReply = async (
           sendStatus: "failed",
           sendErrorMessage: err.message || "Failed to send quote",
         },
-        { new: true }
+        { returnDocument: "after" }
       ).lean();
 
       res.status(500).json({

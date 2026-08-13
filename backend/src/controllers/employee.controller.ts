@@ -419,7 +419,7 @@ export async function updateEmployee(req: Request, res: Response): Promise<void>
     const employee = await Employee.findOneAndUpdate(
       { _id: id, organizationId: organization._id },
       input,
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     )
       .populate("teamId", "name defaultModules status")
       .lean();
@@ -462,7 +462,7 @@ export async function archiveEmployee(req: Request, res: Response): Promise<void
         archivedAt: new Date(),
         "platformAccess.enabled": false,
       },
-      { new: true }
+      { returnDocument: "after" }
     )
       .populate("teamId", "name defaultModules status")
       .lean();
@@ -492,7 +492,7 @@ export async function restoreEmployee(req: Request, res: Response): Promise<void
     const employee = await Employee.findOneAndUpdate(
       { _id: id, organizationId: organization._id },
       { status: "active", archivedAt: null },
-      { new: true }
+      { returnDocument: "after" }
     )
       .populate("teamId", "name defaultModules status")
       .lean();
@@ -622,7 +622,7 @@ export async function linkEmployeeMember(req: Request, res: Response): Promise<v
         organizationMemberId: member._id,
         "platformAccess.enabled": true,
       },
-      { new: true }
+      { returnDocument: "after" }
     )
       .populate("teamId", "name defaultModules status")
       .lean();
@@ -731,7 +731,7 @@ export async function updateEmployeeTeam(req: Request, res: Response): Promise<v
     const team = await EmployeeTeam.findOneAndUpdate(
       { _id: id, organizationId: organization._id },
       input,
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     ).lean();
     if (!team) {
       res.status(404).json({ error: "Team not found" });
@@ -791,7 +791,7 @@ export async function archiveEmployeeTeam(req: Request, res: Response): Promise<
     const team = await EmployeeTeam.findOneAndUpdate(
       { _id: id, organizationId: organization._id },
       { status: "archived" },
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
     if (!team) {
       res.status(404).json({ error: "Team not found" });

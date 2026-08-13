@@ -104,7 +104,7 @@ export async function processDriveExportJob(jobId: Types.ObjectId): Promise<void
   const job = await DriveExportJob.findByIdAndUpdate(
     jobId,
     { status: "running", startedAt: new Date(), error: null },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (!job) return;
 

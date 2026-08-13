@@ -223,7 +223,7 @@ async function executePlaceOrder(context: WorkflowNodeContext): Promise<Workflow
         processedAt: new Date(),
       },
     },
-    { new: true }
+    { returnDocument: "after" }
   ).lean();
 
   if (!updated) throw new Error("RFQ not found while placing order");
@@ -238,7 +238,7 @@ async function executeArchiveRFQ(context: WorkflowNodeContext): Promise<Workflow
   const updated = await RFQ.findOneAndUpdate(
     { _id: context.rfq._id, organizationId: context.organizationId },
     { $set: { isArchived: true } },
-    { new: true }
+    { returnDocument: "after" }
   ).lean();
 
   if (!updated) throw new Error("RFQ not found while archiving");

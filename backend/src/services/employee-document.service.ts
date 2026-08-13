@@ -106,7 +106,7 @@ export async function upsertEmployeeDocument(options: {
           html: null,
         },
       },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
   }
 }

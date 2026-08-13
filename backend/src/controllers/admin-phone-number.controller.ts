@@ -112,7 +112,7 @@ export async function updateAdminPhoneNumber(req: Request, res: Response): Promi
       update.vobizNumberId = req.body.vobizNumberId.trim() || null;
     }
 
-    const mapping = await OrgPhoneNumber.findByIdAndUpdate(id, update, { new: true }).lean();
+    const mapping = await OrgPhoneNumber.findByIdAndUpdate(id, update, { returnDocument: "after" }).lean();
     if (!mapping) {
       res.status(404).json({ error: "Phone number not found" });
       return;

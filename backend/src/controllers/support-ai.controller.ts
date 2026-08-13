@@ -97,7 +97,7 @@ export async function updateSupportAiSettings(req: Request, res: Response): Prom
         "preferences.supportAi.updatedBy": orgReq.user.id,
         "preferences.supportAi.updatedAt": now,
       },
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
 
     res.json({ settings: serializeSettings(organization) });
@@ -191,7 +191,7 @@ export async function updateKnowledgeArticle(req: Request, res: Response): Promi
     const article = await SupportKnowledgeArticle.findOneAndUpdate(
       { _id: id, organizationId: orgReq.organization._id },
       update,
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
     if (!article) {
       res.status(404).json({ error: "Knowledge article not found" });
@@ -253,7 +253,7 @@ export async function updateTicketAiMode(req: Request, res: Response): Promise<v
     const ticket = await Ticket.findOneAndUpdate(
       { _id: req.params.id, organizationId: orgReq.organization._id },
       { aiMode: mode, botEnabled: mode === "autonomous" },
-      { new: true }
+      { returnDocument: "after" }
     )
       .populate("customerId")
       .lean();
@@ -380,7 +380,7 @@ export async function rejectTicketAiDraft(req: Request, res: Response): Promise<
         status: "rejected",
         rejectedByUserId: orgReq.user.id,
       },
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
     if (!draft) {
       res.status(404).json({ error: "AI draft not found" });

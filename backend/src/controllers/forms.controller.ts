@@ -190,7 +190,7 @@ export async function updateForm(req: Request, res: Response): Promise<void> {
     const form = await Form.findOneAndUpdate(
       { _id: id, organizationId: organization._id },
       input,
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     ).lean();
     if (!form) {
       res.status(404).json({ error: "Form not found" });
@@ -250,7 +250,7 @@ export async function archiveForm(req: Request, res: Response): Promise<void> {
     const form = await Form.findOneAndUpdate(
       { _id: id, organizationId: organization._id },
       { status: "archived" },
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
     if (!form) {
       res.status(404).json({ error: "Form not found" });
@@ -304,7 +304,7 @@ export async function updateSubmissionStatus(req: Request, res: Response): Promi
     const submission = await FormSubmission.findOneAndUpdate(
       { _id: submissionId, organizationId: organization._id },
       { status },
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
     if (!submission) {
       res.status(404).json({ error: "Submission not found" });

@@ -454,7 +454,7 @@ export const updateStage = async (req: Request, res: Response): Promise<void> =>
     const stage = await LeadStage.findOneAndUpdate(
       { _id: id, organizationId: organization._id },
       update,
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
     if (!stage) {
       res.status(404).json({ error: "Stage not found" });

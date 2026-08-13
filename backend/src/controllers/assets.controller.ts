@@ -172,7 +172,7 @@ export async function updateCategory(req: Request, res: Response): Promise<void>
     const category = await AssetCategory.findOneAndUpdate(
       { _id: req.params.id, organizationId: organizationIdOf(req) },
       { $set: input },
-      { new: true }
+      { returnDocument: "after" }
     );
     if (!category) {
       res.status(404).json({ error: "Category not found" });
@@ -198,7 +198,7 @@ export async function archiveCategory(req: Request, res: Response): Promise<void
     const category = await AssetCategory.findOneAndUpdate(
       { _id: req.params.id, organizationId: organizationIdOf(req) },
       { $set: { status: "archived" } },
-      { new: true }
+      { returnDocument: "after" }
     );
     if (!category) {
       res.status(404).json({ error: "Category not found" });
@@ -274,7 +274,7 @@ export async function updateLocation(req: Request, res: Response): Promise<void>
           notes: String(req.body?.notes ?? "").trim(),
         },
       },
-      { new: true }
+      { returnDocument: "after" }
     );
     if (!location) {
       res.status(404).json({ error: "Location not found" });
@@ -300,7 +300,7 @@ export async function archiveLocation(req: Request, res: Response): Promise<void
     const location = await AssetLocation.findOneAndUpdate(
       { _id: req.params.id, organizationId: organizationIdOf(req) },
       { $set: { status: "archived" } },
-      { new: true }
+      { returnDocument: "after" }
     );
     if (!location) {
       res.status(404).json({ error: "Location not found" });

@@ -86,7 +86,7 @@ export async function updateFolder(req: Request, res: Response): Promise<void> {
     const folder = await FormFolder.findOneAndUpdate(
       { _id: folderId, organizationId: organization._id },
       patch,
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     ).lean();
     if (!folder) {
       res.status(404).json({ error: "Folder not found" });

@@ -410,7 +410,7 @@ export async function updateAttendance(req: Request, res: Response): Promise<voi
     const record = await Attendance.findOneAndUpdate(
       { _id: id, organizationId: organization._id },
       input,
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     ).lean();
     if (!record) {
       res.status(404).json({ error: "Attendance record not found" });

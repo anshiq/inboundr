@@ -40,7 +40,7 @@ export async function queueRecruitmentAcknowledgement(input: {
         queuedAt: new Date(),
       },
     },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
   );
 }
 
@@ -72,7 +72,7 @@ export async function processNextRecruitmentAcknowledgement() {
       },
       $inc: { attempts: 1 },
     },
-    { new: true, sort: { queuedAt: 1, createdAt: 1 } }
+    { returnDocument: "after", sort: { queuedAt: 1, createdAt: 1 } }
   );
   if (!claimed) return null;
 

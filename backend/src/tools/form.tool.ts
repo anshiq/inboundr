@@ -305,7 +305,7 @@ export function createFormTools(context: FormToolContext) {
         const form = await Form.findOneAndUpdate(
           { _id: formId, organizationId: context.organization._id },
           input,
-          { new: true, runValidators: true }
+          { returnDocument: "after", runValidators: true }
         ).lean();
         if (!form) {
           return { status: "not_found", error: "Form not found" };

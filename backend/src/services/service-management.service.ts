@@ -17,7 +17,7 @@ export async function getOrCreateServiceSettings(organizationId: Types.ObjectId)
   return ServiceManagementSettings.findOneAndUpdate(
     { organizationId },
     { $setOnInsert: { organizationId } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
   );
 }
 
@@ -44,7 +44,7 @@ export async function nextServiceReference(
   const sequence = await DocumentSequence.findOneAndUpdate(
     { organizationId, prefix, fiscalYear },
     { $inc: { value: 1 }, $setOnInsert: { organizationId, prefix, fiscalYear } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
   );
   return {
     reference: `${prefix}-${fiscalYear}-${String(sequence.value).padStart(settings.numberPadding, "0")}`,

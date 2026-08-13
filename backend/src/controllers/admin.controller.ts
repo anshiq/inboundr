@@ -521,7 +521,7 @@ export async function updateAdminOrganization(req: Request, res: Response): Prom
     }
 
     const hadRFQAccess = getEffectiveFeatures(beforeOrganization).includes("rfq");
-    const organization = await Organization.findByIdAndUpdate(id, { $set: update }, { new: true });
+    const organization = await Organization.findByIdAndUpdate(id, { $set: update }, { returnDocument: "after" });
     if (!organization) {
       res.status(404).json({ error: "Organization not found" });
       return;
@@ -1108,7 +1108,7 @@ export async function cancelAdminOrganizationInvitation(req: Request, res: Respo
     const invitation = await OrganizationInvitation.findOneAndUpdate(
       { _id: invitationId, organizationId, status: "pending" },
       { $set: { status: "cancelled", cancelledAt: new Date() } },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     if (!invitation) {

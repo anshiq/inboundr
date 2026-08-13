@@ -68,7 +68,7 @@ export async function updateSupportSettings(req: Request, res: Response): Promis
         "preferences.supportChat.updatedBy": orgReq.user.id,
         "preferences.supportChat.updatedAt": now,
       },
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
 
     res.json({ settings: serializeSupportSettings(organization) });
@@ -137,7 +137,7 @@ export async function updateSupportResolutionReasons(req: Request, res: Response
     const organization = await Organization.findByIdAndUpdate(
       orgReq.organization._id,
       { "preferences.supportResolutionReasons": reasons },
-      { new: true }
+      { returnDocument: "after" }
     )
       .select("preferences.supportResolutionReasons")
       .lean();
@@ -194,7 +194,7 @@ export async function updateSupportCallSettings(req: Request, res: Response): Pr
     };
 
     const organization = await Organization.findByIdAndUpdate(orgReq.organization._id, update, {
-      new: true,
+      returnDocument: "after",
     })
       .select("preferences.supportCall")
       .lean();

@@ -356,7 +356,7 @@ async function claimUploadSlot(input: {
       $expr: { $lt: ["$uploadCount", "$maxUploads"] },
     },
     { $inc: { uploadCount: 1 } },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (!session) {
     throw new RecruitmentServiceError("Upload verification expired or is invalid", 403);
@@ -572,7 +572,7 @@ export async function submitPublicApplication(
         uploadCount: { $gt: 0 },
       },
       { $set: { consumedAt: new Date() } },
-      { new: true }
+      { returnDocument: "after" }
     );
     if (!consumed) {
       throw new RecruitmentServiceError("Application verification expired or was already used", 403);
@@ -625,14 +625,14 @@ export async function submitPublicApplication(
     candidate = await RecruitmentCandidate.findOneAndUpdate(
       { organizationId: settings.organizationId, email },
       candidateUpdate,
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
     );
   } catch (error: any) {
     if (error?.code !== 11000) throw error;
     candidate = await RecruitmentCandidate.findOneAndUpdate(
       { organizationId: settings.organizationId, email },
       candidateUpdate.$set,
-      { new: true }
+      { returnDocument: "after" }
     );
   }
   if (!candidate) {
@@ -735,7 +735,7 @@ export async function submitPublicApplication(
           uploadedByUserId: null,
         },
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
     );
     if (
       customAttachment.applicationId?.toString() !== existing._id.toString() ||
@@ -761,7 +761,7 @@ export async function submitPublicApplication(
             resumeAttachmentId: attachment._id,
           },
         },
-        { new: true }
+        { returnDocument: "after" }
       )
     : null;
   if (!application) {
@@ -806,7 +806,7 @@ export async function submitPublicApplication(
           },
           $inc: { revision: 1 },
         },
-        { new: true }
+        { returnDocument: "after" }
       );
       if (application) {
         previousResumeAttachmentId = before.resumeAttachmentId;

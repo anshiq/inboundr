@@ -396,7 +396,7 @@ async function handleResolve(ws: SupportSocket, payload: Record<string, unknown>
           lastMessageAt: now,
         }
       : { status: "open", resolvedAt: null, resolution: null, lastMessageAt: now },
-    { new: true }
+    { returnDocument: "after" }
   ).lean();
   if (!ticket) return;
   if (resolved) {
@@ -458,7 +458,7 @@ async function handleMarkRead(ws: SupportSocket, payload: Record<string, unknown
     ws.context.kind === "visitor"
       ? { lastVisitorReadAt: now }
       : { lastAgentReadAt: now },
-    { new: true }
+    { returnDocument: "after" }
   ).lean();
 
   if (ticket) {

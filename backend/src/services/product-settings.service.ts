@@ -30,7 +30,7 @@ export async function getOrCreateProductSettings(organizationId: Types.ObjectId)
   return ProductSettings.findOneAndUpdate(
     { organizationId },
     { $setOnInsert: { organizationId } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
   );
 }
 

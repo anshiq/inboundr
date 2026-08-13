@@ -248,7 +248,7 @@ export async function updateRubricDraft(
   const rubric = await RecruitmentRubric.findOneAndUpdate(
     { _id: rubricId, organizationId, jobId, status: "draft" },
     { $set: { ...input, updatedByUserId: actor.userId } },
-    { new: true, runValidators: true }
+    { returnDocument: "after", runValidators: true }
   );
   if (!rubric) throw new RecruitmentRankingServiceError("Editable rubric draft not found", 404);
   return rubric;
@@ -543,7 +543,7 @@ export async function processNextRecruitmentRankingJob() {
       },
       $inc: { attempts: 1 },
     },
-    { new: true, sort: { availableAt: 1, createdAt: 1 } }
+    { returnDocument: "after", sort: { availableAt: 1, createdAt: 1 } }
   );
   if (!claimed) return null;
   await RecruitmentApplication.updateOne(

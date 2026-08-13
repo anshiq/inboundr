@@ -290,7 +290,7 @@ export async function resolveApproval(
         approvalToken: null,
       },
     },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (!run) return { status: "already_decided" };
 
@@ -339,7 +339,7 @@ async function resumeDueDelays(): Promise<void> {
     const claimed = await WorkflowRun.findOneAndUpdate(
       { _id: run._id, status: "waiting_delay" },
       { $set: { status: "running", resumeAt: null } },
-      { new: true }
+      { returnDocument: "after" }
     );
     if (!claimed) continue;
 

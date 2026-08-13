@@ -156,7 +156,7 @@ export async function getRecruitmentSettings(organizationId: OrganizationId) {
           publicCareersEnabled: false,
         },
       },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
     );
   try {
     return await upsert(inferredPath);
@@ -245,7 +245,7 @@ export async function updateRecruitmentSettings(
     return await RecruitmentSettings.findOneAndUpdate(
       { organizationId },
       { $set: update },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
   } catch (error: any) {
     if (error?.code === 11000) {
@@ -324,7 +324,7 @@ export async function saveRecruitmentBanner(
         publicCareersEnabled: false,
       },
     },
-    { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true }
+    { returnDocument: "after", upsert: true, setDefaultsOnInsert: true, runValidators: true }
   );
   return settings;
 }
@@ -808,7 +808,7 @@ export async function saveRecruitmentAttachment(
             updatedByUserId: actor.userId,
           },
         },
-        { new: false }
+        { returnDocument: "before" }
       ).select("resumeAttachmentId");
       if (!replaced) {
         const refreshed = await RecruitmentApplication.findOne({

@@ -79,7 +79,7 @@ async function upsertIndexStatus(input: {
       error: input.error,
       indexedAt: input.indexedAt ?? null,
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   );
 }
 

@@ -52,7 +52,7 @@ export async function putMyDashboardLayout(req: Request, res: Response): Promise
     const layout = await DashboardLayout.findOneAndUpdate(
       { userId: authReq.user.id, organizationId: organization._id },
       { items },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
     ).lean();
 
     res.json({ items: layout?.items ?? [] });

@@ -36,7 +36,7 @@ export async function getOrCreateCustomerSettings(organizationId: Types.ObjectId
   return CustomerSettings.findOneAndUpdate(
     { organizationId },
     { $setOnInsert: { organizationId } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
   );
 }
 

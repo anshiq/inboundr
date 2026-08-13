@@ -192,7 +192,7 @@ export async function updateLink(req: Request, res: Response): Promise<void> {
     const link = await ShortLink.findOneAndUpdate(
       { _id: id, organizationId: organization._id, status: { $ne: "archived" } },
       update,
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     ).lean();
     if (!link) {
       res.status(404).json({ error: "Link not found" });
@@ -220,7 +220,7 @@ export async function archiveLink(req: Request, res: Response): Promise<void> {
     const link = await ShortLink.findOneAndUpdate(
       { _id: id, organizationId: organization._id },
       { status: "archived" },
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
     if (!link) {
       res.status(404).json({ error: "Link not found" });
@@ -333,7 +333,7 @@ export async function redirectShortLink(req: Request, res: Response): Promise<vo
         ],
       },
       { $inc: { viewCount: 1 }, $set: { lastViewedAt: new Date() } },
-      { new: true }
+      { returnDocument: "after" }
     );
     if (!updated) {
       recordLinkEvent(req, "view_limit_reached", link);
@@ -426,7 +426,7 @@ async function finishPublicRedirect(req: Request, res: Response, linkId: mongoos
       ],
     },
     { $inc: { viewCount: 1 }, $set: { lastViewedAt: new Date() } },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (!updated) {
     res.status(410).json({ error: "Link unavailable" });
