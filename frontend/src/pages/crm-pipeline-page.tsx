@@ -24,8 +24,11 @@ import { CSS } from "@dnd-kit/utilities"
 import {
   BuildingIcon,
   CalendarClockIcon,
+  CheckIcon,
+  ChevronDownIcon,
   HandshakeIcon,
   KanbanIcon,
+  ListFilterIcon,
   ListIcon,
   MailIcon,
   MoreHorizontalIcon,
@@ -64,6 +67,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -104,25 +108,97 @@ const VIEW_OPTIONS: { key: CrmView; label: string; icon: typeof KanbanIcon }[] =
 ]
 
 function ViewSwitcher({ view, onChange }: { view: CrmView; onChange: (view: CrmView) => void }) {
+  const active = VIEW_OPTIONS.find((option) => option.key === view) ?? VIEW_OPTIONS[0]!
+  const ActiveIcon = active.icon
   return (
-    <div className="flex items-center rounded-lg border bg-muted/40 p-0.5">
-      {VIEW_OPTIONS.map(({ key, label, icon: Icon }) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onChange(key)}
-          className={cn(
-            "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition",
-            view === key
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <ActiveIcon className="size-4" />
+          {active.label}
+          <ChevronDownIcon className="size-3.5 text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        {VIEW_OPTIONS.map(({ key, label, icon: Icon }) => (
+          <DropdownMenuItem key={key} onClick={() => onChange(key)}>
+            <Icon />
+            {label}
+            {view === key && <CheckIcon className="ml-auto size-4" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function FilterControl({
+  search,
+  onApply,
+}: {
+  search: string
+  onApply: (value: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(search)
+
+  function handleOpenChange(next: boolean) {
+    if (next) setDraft(search)
+    setOpen(next)
+  }
+
+  function apply(value: string) {
+    onApply(value.trim())
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm">
+          <ListFilterIcon className="size-4" />
+          Filter
+          {search && (
+            <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-bold tabular-nums text-primary">
+              1
+            </span>
           )}
-        >
-          <Icon className="size-3.5" />
-          <span className="hidden sm:inline">{label}</span>
-        </button>
-      ))}
-    </div>
+          <ChevronDownIcon className="size-3.5 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 p-3">
+        <div className="grid gap-2">
+          <Label htmlFor="crm-filter-search">Search leads</Label>
+          <div className="relative">
+            <SearchIcon className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="crm-filter-search"
+              autoFocus
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") apply(draft)
+              }}
+              placeholder="Title, contact, company..."
+              className="h-8 pl-8"
+            />
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!search && !draft.trim()}
+            onClick={() => apply("")}
+          >
+            Clear
+          </Button>
+          <Button size="sm" onClick={() => apply(draft)}>
+            Apply
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -504,7 +580,6 @@ export default function CrmPipelinePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
-  const [searchDraft, setSearchDraft] = useState("")
   const [view, setView] = useState<CrmView>(readStoredView)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<NewLeadForm>(EMPTY_LEAD_FORM)
@@ -706,18 +781,7 @@ export default function CrmPipelinePage() {
                 />
                 {view !== "activities" && (
                   <>
-                    <div className="relative">
-                      <SearchIcon className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        value={searchDraft}
-                        onChange={(event) => setSearchDraft(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") setSearch(searchDraft.trim())
-                        }}
-                        placeholder="Search leads..."
-                        className="h-8 w-56 pl-8"
-                      />
-                    </div>
+                    <FilterControl search={search} onApply={setSearch} />
                     <Button
                       variant="outline"
                       size="sm"
