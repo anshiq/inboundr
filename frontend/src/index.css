@@ -454,6 +454,16 @@
   border: 1px solid var(--border);
 }
 
+/* Feed rows keep images short so one screenshot doesn't dominate the list. */
+.rich-note-content.rich-note-images-compact img {
+  max-height: 12rem;
+}
+
+/* Maximized views let images render at their natural size. */
+.rich-note-content.rich-note-images-full img {
+  max-height: none;
+}
+
 .rich-note-content img:not([src]) {
   min-height: 4rem;
   min-width: 8rem;
