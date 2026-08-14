@@ -94,17 +94,23 @@ export function NoteContent({
   html,
   attachments = [],
   className,
+  imageSize = "default",
 }: {
   html: string
   attachments?: NoteAttachment[]
   className?: string
+  imageSize?: "default" | "compact" | "full"
 }) {
   const resolvedHtml = useResolvedNoteHtml(html)
 
   return (
     <div className={className}>
       <div
-        className="rich-note-content text-sm leading-relaxed"
+        className={cn(
+          "rich-note-content text-sm leading-relaxed",
+          imageSize === "compact" && "rich-note-images-compact",
+          imageSize === "full" && "rich-note-images-full"
+        )}
         // Safe to inject: note HTML is sanitized server-side on write.
         dangerouslySetInnerHTML={{ __html: resolvedHtml }}
       />

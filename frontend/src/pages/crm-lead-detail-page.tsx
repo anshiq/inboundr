@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import {
   ArchiveIcon,
@@ -6,10 +15,14 @@ import {
   CalendarClockIcon,
   CheckIcon,
   CheckSquareIcon,
+  ChevronDownIcon,
   ChevronRightIcon,
+  ChevronUpIcon,
   HandshakeIcon,
+  HistoryIcon,
   ListChecksIcon,
   MailIcon,
+  Maximize2Icon,
   MessageSquareTextIcon,
   PenLineIcon,
   PlusIcon,
@@ -216,7 +229,69 @@ function ActivityRow({
   )
 }
 
-function TimelineEntryRow({ entry }: { entry: LeadTimelineEntry }) {
+// Collapsed feed rows clip at this height; anything taller gets a Show More toggle.
+const COLLAPSED_BODY_PX = 224
+
+function CollapsibleEntryBody({ children }: { children: ReactNode }) {
+  const innerRef = useRef<HTMLDivElement | null>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [overflows, setOverflows] = useState(false)
+
+  useEffect(() => {
+    const el = innerRef.current
+    if (!el) return
+    // Note images swap in their signed URLs async, so keep watching for
+    // height changes instead of measuring once. The slack avoids a toggle
+    // that would reveal only a few pixels.
+    const check = () => setOverflows(el.offsetHeight > COLLAPSED_BODY_PX + 48)
+    check()
+    const observer = new ResizeObserver(check)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const clipped = overflows && !expanded
+
+  return (
+    <div>
+      <div className={cn("relative", clipped && "overflow-hidden")} style={clipped ? { maxHeight: COLLAPSED_BODY_PX } : undefined}>
+        <div ref={innerRef}>{children}</div>
+        {clipped && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-background to-transparent" />
+        )}
+      </div>
+      {overflows && (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+        >
+          {expanded ? (
+            <>
+              <ChevronUpIcon className="size-3.5" />
+              Show Less
+            </>
+          ) : (
+            <>
+              <ChevronDownIcon className="size-3.5" />
+              Show More
+            </>
+          )}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function TimelineEntryRow({
+  entry,
+  collapsible = false,
+  onMaximize,
+}: {
+  entry: LeadTimelineEntry
+  collapsible?: boolean
+  onMaximize?: (entry: LeadTimelineEntry) => void
+}) {
   if (entry.kind === "system") {
     return (
       <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
@@ -227,6 +302,17 @@ function TimelineEntryRow({ entry }: { entry: LeadTimelineEntry }) {
     )
   }
 
+  const body = entry.bodyHtml ? (
+    <NoteContent
+      html={entry.bodyHtml}
+      attachments={entry.attachments}
+      className="mt-1.5"
+      imageSize={collapsible ? "compact" : "full"}
+    />
+  ) : (
+    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed">{entry.body}</p>
+  )
+
   return (
     <div
       className={cn(
@@ -235,29 +321,38 @@ function TimelineEntryRow({ entry }: { entry: LeadTimelineEntry }) {
       )}
     >
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+        <span className="inline-flex min-w-0 items-center gap-1.5 font-medium text-foreground">
           {entry.kind === "email_sent" ? (
-            <MailIcon className="size-3.5" />
+            <MailIcon className="size-3.5 shrink-0" />
           ) : (
-            <MessageSquareTextIcon className="size-3.5" />
+            <MessageSquareTextIcon className="size-3.5 shrink-0" />
           )}
           {entry.authorName || "Unknown"}
           {entry.kind === "email_sent" && entry.emailMeta && (
-            <span className="font-normal text-muted-foreground">
+            <span className="truncate font-normal text-muted-foreground">
               emailed {entry.emailMeta.to}
             </span>
           )}
         </span>
-        <span title={formatDateTime(entry.createdAt)}>{formatRelativeTime(entry.createdAt)}</span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span title={formatDateTime(entry.createdAt)}>{formatRelativeTime(entry.createdAt)}</span>
+          {onMaximize && (
+            <button
+              type="button"
+              onClick={() => onMaximize(entry)}
+              className="-my-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Maximize note"
+              title="Maximize"
+            >
+              <Maximize2Icon className="size-3.5" />
+            </button>
+          )}
+        </span>
       </div>
       {entry.kind === "email_sent" && entry.emailMeta && (
         <p className="mt-1.5 text-xs font-semibold">Subject: {entry.emailMeta.subject}</p>
       )}
-      {entry.bodyHtml ? (
-        <NoteContent html={entry.bodyHtml} attachments={entry.attachments} className="mt-1.5" />
-      ) : (
-        <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed">{entry.body}</p>
-      )}
+      {collapsible ? <CollapsibleEntryBody>{body}</CollapsibleEntryBody> : body}
     </div>
   )
 }
@@ -295,6 +390,9 @@ export default function CrmLeadDetailPage() {
     summary: string
     dueDate: string
   }>({ type: "call", summary: "", dueDate: "" })
+
+  const [maximizedEntry, setMaximizedEntry] = useState<LeadTimelineEntry | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const [lostDialogOpen, setLostDialogOpen] = useState(false)
   const [lostReason, setLostReason] = useState("")
@@ -967,12 +1065,38 @@ export default function CrmLeadDetailPage() {
 
                     <Separator className="my-4" />
 
-                    <div className="space-y-2.5">
+                    <div className="mb-2.5 flex items-center justify-between">
+                      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <HistoryIcon className="size-3.5" />
+                        History
+                        {timeline.length > 0 && (
+                          <span className="font-normal tabular-nums">({timeline.length})</span>
+                        )}
+                      </h3>
+                      {timeline.length > 0 && (
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={() => setHistoryOpen(true)}
+                          aria-label="Maximize history"
+                          title="Maximize history"
+                        >
+                          <Maximize2Icon className="size-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="-mr-1 max-h-[34rem] space-y-2.5 overflow-y-auto pr-1">
                       {timeline.length === 0 && (
                         <p className="py-2 text-sm text-muted-foreground">No activity yet.</p>
                       )}
                       {timeline.map((entry) => (
-                        <TimelineEntryRow key={entry._id} entry={entry} />
+                        <TimelineEntryRow
+                          key={entry._id}
+                          entry={entry}
+                          collapsible
+                          onMaximize={setMaximizedEntry}
+                        />
                       ))}
                     </div>
                   </div>
@@ -1051,6 +1175,78 @@ export default function CrmLeadDetailPage() {
               Log Note
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Maximized view of a single note or email */}
+      <Dialog
+        open={maximizedEntry !== null}
+        onOpenChange={(open) => {
+          if (!open) setMaximizedEntry(null)
+        }}
+      >
+        <DialogContent className="flex h-[min(85vh,52rem)] flex-col gap-0 p-0 sm:max-w-3xl">
+          {maximizedEntry && (
+            <>
+              <DialogHeader className="border-b px-5 py-4 text-left">
+                <DialogTitle className="flex items-center gap-2">
+                  {maximizedEntry.kind === "email_sent" ? (
+                    <MailIcon className="size-4 text-muted-foreground" />
+                  ) : (
+                    <MessageSquareTextIcon className="size-4 text-muted-foreground" />
+                  )}
+                  {maximizedEntry.kind === "email_sent" ? "Email" : "Note"} by{" "}
+                  {maximizedEntry.authorName || "Unknown"}
+                </DialogTitle>
+                <DialogDescription>
+                  {formatDateTime(maximizedEntry.createdAt)}
+                  {maximizedEntry.kind === "email_sent" &&
+                    maximizedEntry.emailMeta &&
+                    ` — to ${maximizedEntry.emailMeta.to}`}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                {maximizedEntry.kind === "email_sent" && maximizedEntry.emailMeta && (
+                  <p className="mb-3 text-sm font-semibold">
+                    Subject: {maximizedEntry.emailMeta.subject}
+                  </p>
+                )}
+                {maximizedEntry.bodyHtml ? (
+                  <NoteContent
+                    html={maximizedEntry.bodyHtml}
+                    attachments={maximizedEntry.attachments}
+                    imageSize="full"
+                  />
+                ) : (
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {maximizedEntry.body}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Maximized full history */}
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="flex h-[min(85vh,56rem)] flex-col gap-0 p-0 sm:max-w-3xl">
+          <DialogHeader className="border-b px-5 py-4 text-left">
+            <DialogTitle className="flex items-center gap-2">
+              <HistoryIcon className="size-4 text-muted-foreground" />
+              Full History
+            </DialogTitle>
+            <DialogDescription>
+              {lead
+                ? `Every note, email, and event on "${lead.title}".`
+                : "Every note, email, and event on this lead."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-5">
+            {timeline.map((entry) => (
+              <TimelineEntryRow key={entry._id} entry={entry} />
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
     </>
