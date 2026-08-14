@@ -61,7 +61,20 @@ export async function ingestInboxMessage(
   }).lean();
   if (exists) return false;
 
-  const parsed = await getEmailById(account, messageId);
+  let parsed: ParsedEmail;
+  try {
+    parsed = await getEmailById(account, messageId);
+  } catch (err: any) {
+    // Gmail's history log can reference messages that were deleted (spam
+    // purge, delete filter, another client) before we fetched them. A 404 is
+    // permanent, so treat it as "nothing to ingest" rather than a retryable
+    // failure — otherwise the sync cursor gets stuck replaying it forever.
+    if (err?.status === 404 || err?.code === 404) {
+      console.log(`Gmail message ${messageId} no longer exists, skipping`);
+      return false;
+    }
+    throw err;
+  }
   if (isSelfSentEmail(account, parsed)) {
     console.log(
       `Skipping self-sent Gmail message ${messageId} from ${parsed.from}`
