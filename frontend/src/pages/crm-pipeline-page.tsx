@@ -68,6 +68,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Select,
   SelectContent,
@@ -829,21 +830,23 @@ export default function CrmPipelinePage() {
                 onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
               >
-                <div className="flex h-full gap-3 overflow-x-auto pb-3">
-                  {stages.map((stage) => (
-                    <StageColumn
-                      key={stage._id}
-                      stage={stage}
-                      leadIds={items[stage._id] ?? []}
-                      leadsById={leadsById}
-                      onOpenLead={(id) => void navigate({ to: "/crm/$id", params: { id } })}
-                      onRenameStage={(stageId, name) => void handleRenameStage(stageId, name)}
-                      onDeleteStage={(stageId) => void handleDeleteStage(stageId)}
-                      onQuickAddLead={(stageId, title) => void handleQuickAddLead(stageId, title)}
-                    />
-                  ))}
-                  <AddStageAffordance onAddStage={(name) => void handleAddStage(name)} />
-                </div>
+                <ScrollArea orientation="horizontal" className="h-full">
+                  <div className="flex h-full gap-3 pb-3">
+                    {stages.map((stage) => (
+                      <StageColumn
+                        key={stage._id}
+                        stage={stage}
+                        leadIds={items[stage._id] ?? []}
+                        leadsById={leadsById}
+                        onOpenLead={(id) => void navigate({ to: "/crm/$id", params: { id } })}
+                        onRenameStage={(stageId, name) => void handleRenameStage(stageId, name)}
+                        onDeleteStage={(stageId) => void handleDeleteStage(stageId)}
+                        onQuickAddLead={(stageId, title) => void handleQuickAddLead(stageId, title)}
+                      />
+                    ))}
+                    <AddStageAffordance onAddStage={(name) => void handleAddStage(name)} />
+                  </div>
+                </ScrollArea>
 
                 <DragOverlay dropAnimation={null}>
                   {activeLead ? (
