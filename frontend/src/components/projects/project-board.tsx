@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type { ProjectEmployee, ProjectStage, ProjectTask } from "@/lib/projects"
 import { cn } from "@/lib/utils"
 import {
@@ -665,28 +666,30 @@ export function ProjectBoard({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex h-full gap-3 overflow-x-auto pb-3">
-        <SortableContext items={containers} strategy={horizontalListSortingStrategy}>
-          {orderedStages.map((stage) => (
-            <BoardColumn
-              key={stage._id}
-              stage={stage}
-              taskIds={items[stage._id] ?? []}
-              tasksById={tasksById}
-              employees={employees}
-              trackedByTask={trackedByTask}
-              subtaskCountByTask={subtaskCountByTask}
-              onOpenTask={onOpenTask}
-              onRenameStage={onRenameStage}
-              onRecolorStage={onRecolorStage}
-              onArchiveStage={onArchiveStage}
-              onQuickAddTask={onQuickAddTask}
-              onAddTaskAdvanced={onAddTaskAdvanced}
-            />
-          ))}
-        </SortableContext>
-        <AddListAffordance onAddStage={onAddStage} />
-      </div>
+      <ScrollArea orientation="horizontal" className="h-full">
+        <div className="flex h-full gap-3 pb-3">
+          <SortableContext items={containers} strategy={horizontalListSortingStrategy}>
+            {orderedStages.map((stage) => (
+              <BoardColumn
+                key={stage._id}
+                stage={stage}
+                taskIds={items[stage._id] ?? []}
+                tasksById={tasksById}
+                employees={employees}
+                trackedByTask={trackedByTask}
+                subtaskCountByTask={subtaskCountByTask}
+                onOpenTask={onOpenTask}
+                onRenameStage={onRenameStage}
+                onRecolorStage={onRecolorStage}
+                onArchiveStage={onArchiveStage}
+                onQuickAddTask={onQuickAddTask}
+                onAddTaskAdvanced={onAddTaskAdvanced}
+              />
+            ))}
+          </SortableContext>
+          <AddListAffordance onAddStage={onAddStage} />
+        </div>
+      </ScrollArea>
 
       <DragOverlay dropAnimation={null}>
         {activeTask ? (
