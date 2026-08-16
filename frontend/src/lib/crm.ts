@@ -81,6 +81,8 @@ export interface LeadTimelineEntry {
     gmailMessageId: string | null
     fromAddress: string | null
   } | null
+  /** User ids of team members @-mentioned in the note body. */
+  mentions?: string[]
   metadata: Record<string, unknown>
   createdAt: string
 }
@@ -235,7 +237,12 @@ export function listTimeline(leadId: string) {
 
 export function addNote(
   leadId: string,
-  payload: { body?: string; bodyHtml?: string; attachments?: NoteAttachment[] }
+  payload: {
+    body?: string
+    bodyHtml?: string
+    attachments?: NoteAttachment[]
+    mentionedUserIds?: string[]
+  }
 ) {
   return api<LeadTimelineEntry>(`/leads/${leadId}/notes`, {
     method: "POST",

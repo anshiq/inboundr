@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { EditorContent, useEditor, type Editor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Image from "@tiptap/extension-image"
+import Mention from "@tiptap/extension-mention"
 import {
   BoldIcon,
   ChevronDownIcon,
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { mentionSuggestionOptions } from "@/components/crm/mention-suggestion"
 import type { NoteAttachment } from "@/lib/crm"
 import {
   CRM_NOTE_FILE_ACCEPT,
@@ -58,10 +60,52 @@ const NoteImage = Image.extend({
   },
 })
 
+/**
+ * Team mentions serialize as `<span data-type="mention" data-user-id="...">`
+ * so the server can whitelist exactly that shape, while `data-type` lets
+ * TipTap re-parse drafts back into mention nodes.
+ */
+const MemberMention = Mention.extend({
+  addAttributes() {
+    const parent = this.parent?.() ?? {}
+    return {
+      ...parent,
+      id: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute("data-user-id"),
+        renderHTML: (attributes: Record<string, unknown>) =>
+          attributes.id ? { "data-user-id": attributes.id } : {},
+      },
+      label: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute("data-label"),
+        renderHTML: (attributes: Record<string, unknown>) =>
+          attributes.label ? { "data-label": attributes.label } : {},
+      },
+      // Single-trigger setup: the "@" char adds nothing to the stored HTML.
+      mentionSuggestionChar: {
+        ...(parent as Record<string, { default?: unknown }>).mentionSuggestionChar,
+        renderHTML: () => ({}),
+      },
+    }
+  },
+})
+
+function collectMentionedUserIds(editor: Editor): string[] {
+  const ids = new Set<string>()
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === "mention" && typeof node.attrs.id === "string" && node.attrs.id) {
+      ids.add(node.attrs.id)
+    }
+  })
+  return [...ids]
+}
+
 export interface NoteEditorPayload {
   body: string
   bodyHtml: string
   attachments: NoteAttachment[]
+  mentionedUserIds: string[]
   isEmpty: boolean
 }
 
@@ -232,6 +276,7 @@ export function NoteEditor({
         },
       }),
       NoteImage.configure({ inline: false, allowBase64: false }),
+      MemberMention.configure({ suggestion: mentionSuggestionOptions }),
     ],
     content: initialHtml ?? "",
     editable: !disabled,
@@ -339,6 +384,7 @@ export function NoteEditor({
             body: editor.getText().trim(),
             bodyHtml: editor.getHTML(),
             attachments,
+            mentionedUserIds: collectMentionedUserIds(editor),
             isEmpty: editor.isEmpty && attachments.length === 0,
           }),
           reset: () => {

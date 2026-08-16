@@ -13,6 +13,10 @@ import { LeadTimelineEntry } from "../models/lead-timeline.model";
 import type { OrganizationRequest } from "../middleware/auth.middleware";
 import type { ILeadNoteAttachment } from "../models/lead-timeline.model";
 import { getOrCreateLeadStages, recordLeadTimeline, sanitizeNoteHtml } from "../services/crm.service";
+import {
+  filterMentionableUserIds,
+  notifyLeadNoteMentions,
+} from "../services/crm-mention-notification.service";
 import { htmlToPlainText, sendStandaloneEmail } from "../services/gmail-send.service";
 import { keyBelongsToPrefix } from "../services/storage.service";
 
@@ -799,6 +803,11 @@ export const addNote = async (req: Request, res: Response): Promise<void> => {
       ? "(image)"
       : `(${attachments.length} attachment${attachments.length === 1 ? "" : "s"})`;
 
+    const mentionedUserIds = await filterMentionableUserIds(
+      orgReq.organization._id,
+      req.body?.mentionedUserIds
+    );
+
     const entry = await recordLeadTimeline({
       organizationId: orgReq.organization._id,
       leadId: lead._id,
@@ -808,7 +817,20 @@ export const addNote = async (req: Request, res: Response): Promise<void> => {
       attachments,
       authorUserId: orgReq.user.id,
       authorName: orgReq.user.name ?? null,
+      mentions: mentionedUserIds,
     });
+
+    if (mentionedUserIds.length > 0) {
+      // Fire-and-forget: notification delivery must never fail the note.
+      void notifyLeadNoteMentions({
+        organizationId: orgReq.organization._id,
+        lead: { _id: lead._id, title: lead.title },
+        entryId: entry._id,
+        noteText: bodyText,
+        mentionedUserIds,
+        actor: { userId: orgReq.user.id, name: orgReq.user.name ?? null },
+      });
+    }
 
     res.status(201).json(entry);
   } catch (err) {

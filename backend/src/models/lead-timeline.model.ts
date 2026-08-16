@@ -29,6 +29,8 @@ export interface ILeadTimelineEntry extends Document<Types.ObjectId> {
   bodyHtml: string | null;
   attachments: ILeadNoteAttachment[];
   emailMeta: ILeadTimelineEmailMeta | null;
+  /** Better Auth user ids of team members @-mentioned in a note. */
+  mentions: string[];
   metadata: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -84,6 +86,7 @@ const leadTimelineSchema = new Schema<ILeadTimelineEntry>(
       ),
       default: null,
     },
+    mentions: { type: [String], default: () => [] },
     metadata: { type: Schema.Types.Mixed, default: () => ({}) },
   },
   { timestamps: true }
