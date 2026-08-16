@@ -831,7 +831,7 @@ export default function CrmPipelinePage() {
                 onDragEnd={handleDragEnd}
               >
                 <ScrollArea orientation="horizontal" className="h-full">
-                  <div className="flex h-full gap-3 pb-3">
+                  <div className="flex h-full gap-3 pb-5">
                     {stages.map((stage) => (
                       <StageColumn
                         key={stage._id}

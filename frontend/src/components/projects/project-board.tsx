@@ -667,7 +667,7 @@ export function ProjectBoard({
       onDragEnd={handleDragEnd}
     >
       <ScrollArea orientation="horizontal" className="h-full">
-        <div className="flex h-full gap-3 pb-3">
+        <div className="flex h-full gap-3 pb-5">
           <SortableContext items={containers} strategy={horizontalListSortingStrategy}>
             {orderedStages.map((stage) => (
               <BoardColumn
