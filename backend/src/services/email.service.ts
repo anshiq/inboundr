@@ -12,6 +12,10 @@ import {
   type IGmailAccount,
 } from "../models/gmail-account.model";
 import { Organization } from "../models/organization.model";
+import {
+  SkippedGmailMessage,
+  type SkippedGmailMessageReason,
+} from "../models/skipped-gmail-message.model";
 import { hasEffectiveFeature } from "./entitlement.service";
 
 function extractEmailAddress(value: string | null | undefined): string {
@@ -51,15 +55,36 @@ export async function canProcessQuotationInbox(account: IGmailAccount): Promise<
  * Throws when ingestion fails so callers can decide whether to advance their
  * sync cursor.
  */
+async function recordSkippedMessage(
+  account: IGmailAccount,
+  messageId: string,
+  reason: SkippedGmailMessageReason
+): Promise<void> {
+  try {
+    await SkippedGmailMessage.updateOne(
+      { gmailAccountId: account._id, messageId },
+      { $setOnInsert: { reason } },
+      { upsert: true }
+    );
+  } catch (err) {
+    // Best-effort cache: a failed write just means the message is re-checked
+    // against Gmail on the next sync pass.
+    console.warn(`Failed to record skipped Gmail message ${messageId}:`, err);
+  }
+}
+
 export async function ingestInboxMessage(
   account: IGmailAccount,
   messageId: string
 ): Promise<boolean> {
-  const exists = await Email.exists({
-    gmailAccountId: account._id,
-    messageId,
-  }).lean();
-  if (exists) return false;
+  const [exists, alreadySkipped] = await Promise.all([
+    Email.exists({ gmailAccountId: account._id, messageId }).lean(),
+    SkippedGmailMessage.exists({
+      gmailAccountId: account._id,
+      messageId,
+    }).lean(),
+  ]);
+  if (exists || alreadySkipped) return false;
 
   let parsed: ParsedEmail;
   try {
@@ -71,6 +96,7 @@ export async function ingestInboxMessage(
     // failure — otherwise the sync cursor gets stuck replaying it forever.
     if (err?.status === 404 || err?.code === 404) {
       console.log(`Gmail message ${messageId} no longer exists, skipping`);
+      await recordSkippedMessage(account, messageId, "not_found");
       return false;
     }
     throw err;
@@ -79,6 +105,7 @@ export async function ingestInboxMessage(
     console.log(
       `Skipping self-sent Gmail message ${messageId} from ${parsed.from}`
     );
+    await recordSkippedMessage(account, messageId, "self_sent");
     return false;
   }
 

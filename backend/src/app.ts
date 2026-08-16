@@ -177,14 +177,17 @@ export async function initializeServices(): Promise<void> {
     console.warn("Chat document retrieval will be unavailable until the database is reachable");
   }
 
-  try {
-    await startWatchesForConnectedAccounts();
-    scheduleWatchRenewal();
-    console.log("Gmail watcher initialized");
-  } catch (err) {
-    console.error("Failed to initialize Gmail watcher:", err);
-    console.warn("Server will continue without Gmail watch — set up GCP credentials and retry");
-  }
+  // Watch registration + history catch-up can take minutes on a cold boot, so
+  // run it in the background instead of blocking app.listen. A failed catch-up
+  // leaves the sync cursor untouched and is retried by the next Pub/Sub
+  // notification or the reconciliation cron.
+  startWatchesForConnectedAccounts()
+    .then(() => console.log("Gmail watcher initialized"))
+    .catch((err) => {
+      console.error("Failed to initialize Gmail watcher:", err);
+      console.warn("Server will continue without Gmail watch — set up GCP credentials and retry");
+    });
+  scheduleWatchRenewal();
 
   backfillRFQThreadIds().catch((err) =>
     console.error("RFQ threadId backfill failed:", err)
