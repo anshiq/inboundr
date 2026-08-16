@@ -622,6 +622,7 @@ export default function CrmLeadDetailPage() {
         body: payload.body,
         bodyHtml: payload.bodyHtml,
         attachments: payload.attachments,
+        mentionedUserIds: payload.mentionedUserIds,
       })
       setTimeline((prev) => [entry, ...prev])
       setNoteDraft(null)
@@ -1137,7 +1138,14 @@ export default function CrmLeadDetailPage() {
       </Dialog>
 
       <Dialog open={noteModalOpen} onOpenChange={handleNoteModalOpenChange}>
-        <DialogContent className="flex h-[min(85vh,52rem)] flex-col gap-0 p-0 sm:max-w-3xl">
+        <DialogContent
+          className="flex h-[min(85vh,52rem)] flex-col gap-0 p-0 sm:max-w-3xl"
+          // Escape while the "@" mention menu is open should only dismiss the
+          // menu (handled by the editor), not throw away the whole note.
+          onEscapeKeyDown={(event) => {
+            if (document.querySelector("[data-mention-popup]")) event.preventDefault()
+          }}
+        >
           <DialogHeader className="border-b px-5 py-4 text-left">
             <DialogTitle>Log Note</DialogTitle>
             <DialogDescription>

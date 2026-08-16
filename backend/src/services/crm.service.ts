@@ -101,6 +101,7 @@ export async function recordLeadTimeline(input: {
   authorUserId?: string | null;
   authorName?: string | null;
   emailMeta?: ILeadTimelineEmailMeta | null;
+  mentions?: string[];
   metadata?: Record<string, unknown>;
 }): Promise<ILeadTimelineEntry> {
   return LeadTimelineEntry.create({
@@ -113,6 +114,7 @@ export async function recordLeadTimeline(input: {
     authorUserId: input.authorUserId ?? null,
     authorName: input.authorName ?? null,
     emailMeta: input.emailMeta ?? null,
+    mentions: input.mentions ?? [],
     metadata: input.metadata ?? {},
   });
 }
@@ -127,12 +129,14 @@ export async function recordLeadTimeline(input: {
 export function sanitizeNoteHtml(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: [
-      "p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a",
+      "p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "span",
       "ul", "ol", "li", "blockquote", "code", "pre", "h1", "h2", "h3", "hr", "img",
     ],
     allowedAttributes: {
       a: ["href", "target", "rel"],
       img: ["src", "alt", "width", "height", "data-key"],
+      // Team @-mention chips emitted by the TipTap Mention extension.
+      span: ["data-type", "data-user-id", "data-label"],
     },
     allowedSchemes: ["http", "https", "mailto", "tel"],
     allowedSchemesByTag: { img: ["http", "https"] },
