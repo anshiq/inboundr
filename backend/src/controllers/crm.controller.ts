@@ -765,54 +765,111 @@ function normalizeNoteAttachments(
   return attachments;
 }
 
+interface ParsedNoteInput {
+  body: string;
+  bodyHtml: string | null;
+  attachments: ILeadNoteAttachment[];
+  mentionedUserIds: string[];
+  /** Plain text used for mention notification previews. */
+  noteText: string;
+}
+
+/**
+ * Validates and normalizes a note payload (shared by create and edit).
+ * Writes the error response and returns null when the payload is invalid.
+ */
+async function parseNoteInput(req: Request, res: Response): Promise<ParsedNoteInput | null> {
+  const orgReq = req as OrganizationRequest;
+
+  const rawHtml = optionalTrimmed(req.body?.bodyHtml);
+  if (rawHtml && rawHtml.length > NOTE_HTML_MAX_LENGTH) {
+    res.status(400).json({ error: "Note is too long" });
+    return null;
+  }
+
+  const attachments = normalizeNoteAttachments(
+    req.body?.attachments,
+    String(orgReq.organization._id)
+  );
+  if (attachments === null) {
+    res.status(400).json({ error: "Invalid note attachments" });
+    return null;
+  }
+
+  const bodyHtml = rawHtml ? sanitizeNoteHtml(rawHtml) : null;
+  // The plain-text body is derived server-side (not trusted from the client)
+  // because it doubles as the fallback rendering for older app versions.
+  const bodyText = bodyHtml
+    ? htmlToPlainText(bodyHtml)
+    : (optionalTrimmed(req.body?.body) ?? "");
+  const hasInlineImage = bodyHtml ? /<img\s/i.test(bodyHtml) : false;
+
+  if (!bodyText && !hasInlineImage && attachments.length === 0) {
+    res.status(400).json({ error: "Note body is required" });
+    return null;
+  }
+
+  const fallbackBody = hasInlineImage
+    ? "(image)"
+    : `(${attachments.length} attachment${attachments.length === 1 ? "" : "s"})`;
+
+  const mentionedUserIds = await filterMentionableUserIds(
+    orgReq.organization._id,
+    req.body?.mentionedUserIds
+  );
+
+  return {
+    body: (bodyText || fallbackBody).slice(0, NOTE_TEXT_MAX_LENGTH),
+    bodyHtml,
+    attachments,
+    mentionedUserIds,
+    noteText: bodyText,
+  };
+}
+
+/**
+ * Loads a note timeline entry scoped to the lead + organization and enforces
+ * that only the note's author can modify it.
+ */
+async function findOwnNoteEntry(req: Request, res: Response, leadId: mongoose.Types.ObjectId) {
+  const orgReq = req as OrganizationRequest;
+  const entryId = String(req.params.entryId ?? "");
+  if (!isValidId(entryId)) {
+    res.status(400).json({ error: "Invalid note id" });
+    return null;
+  }
+  const entry = await LeadTimelineEntry.findOne({
+    _id: entryId,
+    organizationId: orgReq.organization._id,
+    leadId,
+    kind: "note",
+  });
+  if (!entry) {
+    res.status(404).json({ error: "Note not found" });
+    return null;
+  }
+  if (entry.authorUserId !== orgReq.user.id) {
+    res.status(403).json({ error: "Only the note's author can modify it" });
+    return null;
+  }
+  return entry;
+}
+
 export const addNote = async (req: Request, res: Response): Promise<void> => {
   try {
     const orgReq = req as OrganizationRequest;
     const lead = await findLead(req, res);
     if (!lead) return;
 
-    const rawHtml = optionalTrimmed(req.body?.bodyHtml);
-    if (rawHtml && rawHtml.length > NOTE_HTML_MAX_LENGTH) {
-      res.status(400).json({ error: "Note is too long" });
-      return;
-    }
-
-    const attachments = normalizeNoteAttachments(
-      req.body?.attachments,
-      String(orgReq.organization._id)
-    );
-    if (attachments === null) {
-      res.status(400).json({ error: "Invalid note attachments" });
-      return;
-    }
-
-    const bodyHtml = rawHtml ? sanitizeNoteHtml(rawHtml) : null;
-    // The plain-text body is derived server-side (not trusted from the client)
-    // because it doubles as the fallback rendering for older app versions.
-    const bodyText = bodyHtml
-      ? htmlToPlainText(bodyHtml)
-      : (optionalTrimmed(req.body?.body) ?? "");
-    const hasInlineImage = bodyHtml ? /<img\s/i.test(bodyHtml) : false;
-
-    if (!bodyText && !hasInlineImage && attachments.length === 0) {
-      res.status(400).json({ error: "Note body is required" });
-      return;
-    }
-
-    const fallbackBody = hasInlineImage
-      ? "(image)"
-      : `(${attachments.length} attachment${attachments.length === 1 ? "" : "s"})`;
-
-    const mentionedUserIds = await filterMentionableUserIds(
-      orgReq.organization._id,
-      req.body?.mentionedUserIds
-    );
+    const input = await parseNoteInput(req, res);
+    if (!input) return;
+    const { bodyHtml, attachments, mentionedUserIds, noteText: bodyText } = input;
 
     const entry = await recordLeadTimeline({
       organizationId: orgReq.organization._id,
       leadId: lead._id,
       kind: "note",
-      body: (bodyText || fallbackBody).slice(0, NOTE_TEXT_MAX_LENGTH),
+      body: input.body,
       bodyHtml,
       attachments,
       authorUserId: orgReq.user.id,
@@ -836,6 +893,64 @@ export const addNote = async (req: Request, res: Response): Promise<void> => {
   } catch (err) {
     console.error("Error adding lead note:", err);
     res.status(500).json({ error: "Failed to add note" });
+  }
+};
+
+export const updateNote = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const orgReq = req as OrganizationRequest;
+    const lead = await findLead(req, res);
+    if (!lead) return;
+
+    const entry = await findOwnNoteEntry(req, res, lead._id);
+    if (!entry) return;
+
+    const input = await parseNoteInput(req, res);
+    if (!input) return;
+
+    const previousMentions = new Set(entry.mentions ?? []);
+
+    entry.body = input.body;
+    entry.bodyHtml = input.bodyHtml;
+    entry.attachments = input.attachments;
+    entry.mentions = input.mentionedUserIds;
+    await entry.save();
+
+    // Only users mentioned for the first time get notified; the per-entry
+    // dedupe key in the notification service guards against repeats anyway.
+    const addedMentions = input.mentionedUserIds.filter((id) => !previousMentions.has(id));
+    if (addedMentions.length > 0) {
+      // Fire-and-forget: notification delivery must never fail the edit.
+      void notifyLeadNoteMentions({
+        organizationId: orgReq.organization._id,
+        lead: { _id: lead._id, title: lead.title },
+        entryId: entry._id,
+        noteText: input.noteText,
+        mentionedUserIds: addedMentions,
+        actor: { userId: orgReq.user.id, name: orgReq.user.name ?? null },
+      });
+    }
+
+    res.json(entry);
+  } catch (err) {
+    console.error("Error updating lead note:", err);
+    res.status(500).json({ error: "Failed to update note" });
+  }
+};
+
+export const deleteNote = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const lead = await findLead(req, res);
+    if (!lead) return;
+
+    const entry = await findOwnNoteEntry(req, res, lead._id);
+    if (!entry) return;
+
+    await entry.deleteOne();
+    res.json({ message: "Note deleted" });
+  } catch (err) {
+    console.error("Error deleting lead note:", err);
+    res.status(500).json({ error: "Failed to delete note" });
   }
 };
 
