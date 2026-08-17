@@ -69,38 +69,36 @@ export function DriveFilePickerDialog({
 
   React.useEffect(() => {
     if (!open) return
-    async function reset() {
-      setSearch("")
-      setCurrentFolder(null)
-      setBreadcrumbs([])
-      await load(null, "")
-    }
-    void reset()
-  }, [open, load])
+    setSearch("")
+    setCurrentFolder(null)
+    setBreadcrumbs([])
+  }, [open])
 
-  // Debounced so typing does not fire a request per keystroke.
+  // Single loader for open/navigation/search. Search input is debounced so
+  // typing does not fire a request per keystroke; navigation loads on the
+  // next tick. Depending on `open` means closing the dialog cancels any
+  // pending load instead of letting it fire against a closed picker.
   React.useEffect(() => {
     if (!open) return
-    const timer = window.setTimeout(() => {
-      void load(currentFolder?._id ?? null, search)
-    }, 250)
+    const timer = window.setTimeout(
+      () => {
+        void load(currentFolder?._id ?? null, search)
+      },
+      search.trim() ? 250 : 0
+    )
     return () => window.clearTimeout(timer)
-    // Navigation loads directly; only search changes should re-trigger this.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search])
+  }, [open, search, currentFolder, load])
 
   function enterFolder(folder: DriveNode) {
     setCurrentFolder(folder)
     setBreadcrumbs((current) => [...current, folder])
     setSearch("")
-    void load(folder._id, "")
   }
 
   function jumpToRoot() {
     setCurrentFolder(null)
     setBreadcrumbs([])
     setSearch("")
-    void load(null, "")
   }
 
   function jumpToCrumb(index: number) {
@@ -109,7 +107,6 @@ export function DriveFilePickerDialog({
     setCurrentFolder(folder)
     setBreadcrumbs((current) => current.slice(0, index + 1))
     setSearch("")
-    void load(folder._id, "")
   }
 
   const folders = nodes.filter((node) => node.type === "folder")

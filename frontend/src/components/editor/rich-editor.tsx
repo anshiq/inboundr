@@ -383,24 +383,38 @@ export function RichEditor({
   const handleIncomingFiles = useCallback(
     (files: File[], insertAt?: number) => {
       if (disabled) return
-      for (const file of files) {
+      // Uploads run in parallel, but image insertion is serialized below so a
+      // multi-file drop lands in the user's file order (not completion order)
+      // and each image advances the insert position instead of stacking at
+      // the original drop point.
+      const uploads = files.map((file) => {
         setUploadingCount((count) => count + 1)
-        void uploadEditorFile(file, uploadScope)
+        return uploadEditorFile(file, uploadScope)
           .then(async (attachment) => {
-            if (EDITOR_IMAGE_TYPES.includes(attachment.contentType)) {
-              const url = await resolveEditorFileUrl(attachment.key)
-              if (editor && !editor.isDestroyed) {
-                insertUploadedImage(editor, file, attachment.key, url, insertAt)
-              }
-            } else {
+            if (!EDITOR_IMAGE_TYPES.includes(attachment.contentType)) {
               setAttachments((prev) => [...prev, attachment])
+              return null
             }
+            return { file, attachment, url: await resolveEditorFileUrl(attachment.key) }
           })
           .catch((err) => {
             toast.error(err instanceof Error ? err.message : `Failed to upload ${file.name}`)
+            return null
           })
           .finally(() => setUploadingCount((count) => count - 1))
-      }
+      })
+
+      void (async () => {
+        let position = insertAt
+        for (const upload of uploads) {
+          const image = await upload
+          if (!image || !editor || editor.isDestroyed) continue
+          insertUploadedImage(editor, image.file, image.attachment.key, image.url, position)
+          // insertContent(At) leaves the selection after the inserted node,
+          // so the next image goes right after the one that just landed.
+          if (position !== undefined) position = editor.state.selection.to
+        }
+      })()
     },
     [disabled, editor, insertUploadedImage, uploadScope]
   )

@@ -10,6 +10,7 @@ import type {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { createSuggestionPopup, type SuggestionPopup } from "@/components/editor/suggestion-popup"
 import { API_ORIGIN } from "@/lib/env"
+import { getActiveOrganizationId } from "@/lib/organization-context"
 import { cn, getAvatarColor } from "@/lib/utils"
 
 export interface MentionMember {
@@ -19,9 +20,14 @@ export interface MentionMember {
   image: string | null
 }
 
-// One fetch per session: the member list is small and stable, and the picker
-// must respond instantly once the user types "@".
-let membersPromise: Promise<MentionMember[]> | null = null
+// One fetch per organization per session: the member list is small and
+// stable, and the picker must respond instantly once the user types "@".
+// Keyed by the active organization so switching orgs without a full reload
+// never offers members of the previous organization.
+let membersCache: {
+  organizationId: string | null
+  promise: Promise<MentionMember[]>
+} | null = null
 
 async function fetchMentionMembers(): Promise<MentionMember[]> {
   const response = await fetch(`${API_ORIGIN}/api/v1/organization/members`, {
@@ -41,13 +47,16 @@ async function fetchMentionMembers(): Promise<MentionMember[]> {
 }
 
 function loadMentionMembers(): Promise<MentionMember[]> {
-  if (!membersPromise) {
-    membersPromise = fetchMentionMembers().catch((err) => {
-      membersPromise = null
+  const organizationId = getActiveOrganizationId()
+  if (!membersCache || membersCache.organizationId !== organizationId) {
+    const promise = fetchMentionMembers().catch((err) => {
+      // Drop only our own failed entry; a newer org's fetch must survive.
+      if (membersCache?.promise === promise) membersCache = null
       throw err
     })
+    membersCache = { organizationId, promise }
   }
-  return membersPromise
+  return membersCache.promise
 }
 
 interface MentionListRef {
