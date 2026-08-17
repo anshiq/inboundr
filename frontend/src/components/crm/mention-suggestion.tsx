@@ -195,6 +195,9 @@ export const mentionSuggestionOptions: Omit<
         popup.style.position = "fixed"
         // Above the note dialog (Radix overlays sit at z-50).
         popup.style.zIndex = "100"
+        // The modal dialog sets pointer-events: none on <body>; re-enable
+        // them here so the popup can be clicked.
+        popup.style.pointerEvents = "auto"
         popup.appendChild(component.element)
         document.body.appendChild(popup)
         updatePosition(props.clientRect)
