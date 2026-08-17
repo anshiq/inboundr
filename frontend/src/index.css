@@ -470,6 +470,18 @@
   background: var(--muted);
 }
 
+/* ProseMirror appends a zero-size src-less helper image after inline atom
+   nodes (mention / drive-file / form chips) for cursor handling; it must not
+   pick up the uploaded-image styling above or it renders as an empty box. */
+.rich-note-content img.ProseMirror-separator {
+  display: inline;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+}
+
 .rich-note-content img.ProseMirror-selectednode {
   outline: 2px solid var(--primary);
 }
@@ -482,4 +494,53 @@
   color: var(--primary);
   font-weight: 500;
   white-space: nowrap;
+}
+
+/* Drive-file and form reference chips inserted via the "/" menu. Clicking
+   them opens the target, so they read as interactive. */
+.rich-note-content span[data-type="drive-file"],
+.rich-note-content span[data-type="form-link"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  max-width: 100%;
+  vertical-align: baseline;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  padding: 0.05em 0.4em;
+  background: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.rich-note-content span[data-type="drive-file"]:hover,
+.rich-note-content span[data-type="form-link"]:hover {
+  background: color-mix(in oklab, var(--primary) 9%, transparent);
+  border-color: color-mix(in oklab, var(--primary) 35%, transparent);
+  color: var(--primary);
+}
+
+.rich-note-content span[data-type="drive-file"]::before,
+.rich-note-content span[data-type="form-link"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  flex-shrink: 0;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z'/%3E%3Cpath d='M15 2v5h5'/%3E%3C/svg%3E")
+    no-repeat center / contain;
+}
+
+.rich-note-content span[data-type="form-link"]::before {
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z'/%3E%3Cpath d='M15 2v5h5'/%3E%3Cpath d='M8 13h8'/%3E%3Cpath d='M8 17h8'/%3E%3C/svg%3E")
+    no-repeat center / contain;
+}
+
+.rich-note-content span[data-type="drive-file"].ProseMirror-selectednode,
+.rich-note-content span[data-type="form-link"].ProseMirror-selectednode {
+  outline: 2px solid var(--primary);
 }

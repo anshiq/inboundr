@@ -8,6 +8,7 @@ import type {
 } from "@tiptap/suggestion"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { createSuggestionPopup, type SuggestionPopup } from "@/components/editor/suggestion-popup"
 import { API_ORIGIN } from "@/lib/env"
 import { cn, getAvatarColor } from "@/lib/utils"
 
@@ -173,56 +174,28 @@ export const mentionSuggestionOptions: Omit<
   },
   render: () => {
     let component: ReactRenderer<MentionListRef, SuggestionProps<MentionMember, MentionNodeAttrs>>
-    let popup: HTMLDivElement | null = null
-
-    const updatePosition = (clientRect: (() => DOMRect | null) | null | undefined) => {
-      const rect = clientRect?.()
-      if (!popup || !rect) return
-      const { offsetWidth, offsetHeight } = popup
-      const gap = 6
-      const left = Math.min(rect.left, window.innerWidth - offsetWidth - 8)
-      const fitsBelow = rect.bottom + gap + offsetHeight <= window.innerHeight
-      const top = fitsBelow ? rect.bottom + gap : Math.max(rect.top - gap - offsetHeight, 8)
-      popup.style.left = `${Math.max(left, 8)}px`
-      popup.style.top = `${top}px`
-    }
+    let popup: SuggestionPopup | null = null
 
     return {
       onStart: (props) => {
         component = new ReactRenderer(MentionList, { props, editor: props.editor })
-        popup = document.createElement("div")
-        popup.dataset.mentionPopup = ""
-        popup.style.position = "fixed"
-        // Above the note dialog (Radix overlays sit at z-50).
-        popup.style.zIndex = "100"
-        // The modal dialog sets pointer-events: none on <body>; re-enable
-        // them here so the popup can be clicked.
-        popup.style.pointerEvents = "auto"
-        popup.appendChild(component.element)
-        document.body.appendChild(popup)
-        updatePosition(props.clientRect)
+        popup = createSuggestionPopup(component.element as HTMLElement)
+        popup.updatePosition(props.clientRect)
       },
       onUpdate: (props) => {
         component.updateProps(props)
-        if (popup) {
-          popup.style.display = ""
-          popup.dataset.mentionPopup = ""
-        }
-        updatePosition(props.clientRect)
+        popup?.show()
+        popup?.updatePosition(props.clientRect)
       },
       onKeyDown: (props) => {
         if (props.event.key === "Escape") {
-          // Hide and unmark so the next Escape reaches the dialog again.
-          if (popup) {
-            popup.style.display = "none"
-            delete popup.dataset.mentionPopup
-          }
+          popup?.hide()
           return true
         }
         return component.ref?.onKeyDown(props) ?? false
       },
       onExit: () => {
-        popup?.remove()
+        popup?.destroy()
         popup = null
         component.destroy()
       },

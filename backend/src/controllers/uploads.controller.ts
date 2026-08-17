@@ -45,7 +45,7 @@ const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 const AVATAR_ALLOWED_MIME_TYPES = ["image/webp", "image/jpeg", "image/png"];
 const AVATAR_MAX_FILE_SIZE = 2 * 1024 * 1024;
 const IMAGE_UPLOAD_SCOPES = ["branding", "letterhead", "employee", "attendance"] as const;
-const AUTHENTICATED_UPLOAD_SCOPES = ["form", "customer", "quote", "product", "support", "branding", "letterhead", "employee", "attendance", "asset", "email", "crm"] as const;
+const AUTHENTICATED_UPLOAD_SCOPES = ["form", "customer", "quote", "product", "support", "branding", "letterhead", "employee", "attendance", "asset", "email", "crm", "projects"] as const;
 
 function normalizeUploadRequest(body: Record<string, unknown>) {
   return {
@@ -71,15 +71,16 @@ function validateUploadBasics(input: ReturnType<typeof normalizeUploadRequest>, 
 function allowedMimeTypesForScope(scope: string): string[] {
   if (scope === "employee" || scope === "attendance") return AVATAR_ALLOWED_MIME_TYPES;
   if (scope === "support") return SUPPORT_ALLOWED_MIME_TYPES;
-  // CRM note attachments reuse the email allowlist: same "documents a
-  // salesperson shares" shape, and notes can be forwarded by email later.
-  if (scope === "email" || scope === "crm") return [...EMAIL_ATTACHMENT_ALLOWED_MIME_TYPES];
+  // CRM note and project-task attachments reuse the email allowlist: same
+  // "documents a teammate shares" shape, and notes can be forwarded by email
+  // later.
+  if (scope === "email" || scope === "crm" || scope === "projects") return [...EMAIL_ATTACHMENT_ALLOWED_MIME_TYPES];
   return IMAGE_UPLOAD_SCOPES.includes(scope as any) ? [...BRANDING_ALLOWED_MIME_TYPES] : DEFAULT_ALLOWED_MIME_TYPES;
 }
 
 function maxFileSizeForScope(scope: string): number {
   if (IMAGE_UPLOAD_SCOPES.includes(scope as any)) return BRANDING_MAX_FILE_SIZE;
-  if (scope === "email" || scope === "crm") return EMAIL_ATTACHMENT_MAX_FILE_SIZE;
+  if (scope === "email" || scope === "crm" || scope === "projects") return EMAIL_ATTACHMENT_MAX_FILE_SIZE;
   return DEFAULT_MAX_FILE_SIZE;
 }
 
@@ -211,7 +212,10 @@ export async function createAuthenticatedPresign(req: Request, res: Response): P
       return;
     }
 
-    if (input.scope === "crm" && isBlockedAttachmentFilename(input.fileName)) {
+    if (
+      (input.scope === "crm" || input.scope === "projects") &&
+      isBlockedAttachmentFilename(input.fileName)
+    ) {
       res.status(400).json({ error: "This file type is not allowed" });
       return;
     }
@@ -229,6 +233,8 @@ export async function createAuthenticatedPresign(req: Request, res: Response): P
                 ? ["outbox"]
                 : input.scope === "crm"
                   ? ["notes"]
+                  : input.scope === "projects"
+                    ? ["tasks"]
           : [];
     const presigned = await createPresignedUpload({
       scope: input.scope,

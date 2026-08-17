@@ -136,30 +136,11 @@ function renderTextPart(boundary: string | null, mimeType: string, body: string)
 }
 
 /**
- * Very rough HTML to text conversion for the text/plain alternative. Clients
- * that render the HTML part never see this, so fidelity matters less than not
- * shipping raw tags to text-only readers.
+ * Rough HTML to text conversion for the text/plain alternative; lives in the
+ * shared rich-text service. Re-exported so existing imports keep working.
  */
-export function htmlToPlainText(html: string): string {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|tr|li|h[1-6]|blockquote)>/gi, "\n")
-    .replace(/<li[^>]*>/gi, "- ")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/\n{3,}/g, "\n\n")
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .join("\n")
-    .trim();
-}
+export { htmlToPlainText } from "./rich-text.service";
+import { htmlToPlainText } from "./rich-text.service";
 
 /**
  * Build a complete RFC 5322 message.

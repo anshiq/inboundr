@@ -1,5 +1,4 @@
 import type { Types } from "mongoose";
-import sanitizeHtml from "sanitize-html";
 import { Lead, type ILead, type LeadSource } from "../models/lead.model";
 import { LeadStage, type ILeadStage } from "../models/lead-stage.model";
 import {
@@ -119,29 +118,5 @@ export async function recordLeadTimeline(input: {
   });
 }
 
-/**
- * The note editor's schema is not a security boundary — the HTML arrives over
- * HTTP and is later rendered for every teammate viewing the lead. Restrict it
- * to what the TipTap note toolbar can actually emit. Uploaded images carry a
- * `data-key` storage reference that the client resolves to a short-lived
- * signed URL at render time, so keys must survive sanitization.
- */
-export function sanitizeNoteHtml(html: string): string {
-  return sanitizeHtml(html, {
-    allowedTags: [
-      "p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "span",
-      "ul", "ol", "li", "blockquote", "code", "pre", "h1", "h2", "h3", "hr", "img",
-    ],
-    allowedAttributes: {
-      a: ["href", "target", "rel"],
-      img: ["src", "alt", "width", "height", "data-key"],
-      // Team @-mention chips emitted by the TipTap Mention extension.
-      span: ["data-type", "data-user-id", "data-label"],
-    },
-    allowedSchemes: ["http", "https", "mailto", "tel"],
-    allowedSchemesByTag: { img: ["http", "https"] },
-    transformTags: {
-      a: sanitizeHtml.simpleTransform("a", { target: "_blank", rel: "noopener noreferrer" }),
-    },
-  });
-}
+/** Note HTML shares the app-wide rich-text sanitizer (see rich-text.service). */
+export { sanitizeRichTextHtml as sanitizeNoteHtml } from "./rich-text.service";
