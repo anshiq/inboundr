@@ -1145,6 +1145,14 @@ export default function CrmLeadDetailPage() {
           onEscapeKeyDown={(event) => {
             if (document.querySelector("[data-mention-popup]")) event.preventDefault()
           }}
+          // Clicking a person in the body-portaled "@" mention menu must not
+          // count as an outside interaction that dismisses the dialog.
+          onPointerDownOutside={(event) => {
+            if ((event.target as HTMLElement).closest("[data-mention-popup]")) event.preventDefault()
+          }}
+          onInteractOutside={(event) => {
+            if ((event.target as HTMLElement).closest("[data-mention-popup]")) event.preventDefault()
+          }}
         >
           <DialogHeader className="border-b px-5 py-4 text-left">
             <DialogTitle>Log Note</DialogTitle>
