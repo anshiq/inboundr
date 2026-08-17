@@ -85,6 +85,7 @@ export interface LeadTimelineEntry {
   mentions?: string[]
   metadata: Record<string, unknown>
   createdAt: string
+  updatedAt: string
 }
 
 export interface LeadPayload {
@@ -235,19 +236,29 @@ export function listTimeline(leadId: string) {
   return api<{ entries: LeadTimelineEntry[] }>(`/leads/${leadId}/timeline`)
 }
 
-export function addNote(
-  leadId: string,
-  payload: {
-    body?: string
-    bodyHtml?: string
-    attachments?: NoteAttachment[]
-    mentionedUserIds?: string[]
-  }
-) {
+export interface NotePayload {
+  body?: string
+  bodyHtml?: string
+  attachments?: NoteAttachment[]
+  mentionedUserIds?: string[]
+}
+
+export function addNote(leadId: string, payload: NotePayload) {
   return api<LeadTimelineEntry>(`/leads/${leadId}/notes`, {
     method: "POST",
     body: JSON.stringify(payload),
   })
+}
+
+export function updateNote(leadId: string, entryId: string, payload: NotePayload) {
+  return api<LeadTimelineEntry>(`/leads/${leadId}/notes/${entryId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteNote(leadId: string, entryId: string) {
+  return api<{ message: string }>(`/leads/${leadId}/notes/${entryId}`, { method: "DELETE" })
 }
 
 export function sendLeadEmail(

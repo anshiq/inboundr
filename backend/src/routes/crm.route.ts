@@ -7,6 +7,7 @@ import {
   createLead,
   createStage,
   deleteActivity,
+  deleteNote,
   deleteStage,
   getBoard,
   getLead,
@@ -22,6 +23,7 @@ import {
   sendLeadEmail,
   updateActivity,
   updateLead,
+  updateNote,
   updateStage,
 } from "../controllers/crm.controller";
 import {
@@ -65,6 +67,8 @@ router.delete("/activities/:activityId", deleteActivity);
 
 router.get("/leads/:id/timeline", listTimeline);
 router.post("/leads/:id/notes", addNote);
+router.put("/leads/:id/notes/:entryId", updateNote);
+router.delete("/leads/:id/notes/:entryId", deleteNote);
 router.post("/leads/:id/send-email", sendLeadEmail);
 
 export default router;

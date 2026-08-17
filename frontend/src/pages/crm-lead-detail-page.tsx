@@ -28,6 +28,7 @@ import {
   PlusIcon,
   RotateCcwIcon,
   SendIcon,
+  Trash2Icon,
   TrophyIcon,
   UsersIcon,
   XIcon,
@@ -66,6 +67,7 @@ import {
   convertLead,
   createActivity,
   deleteActivity,
+  deleteNote,
   getBoard,
   getLead,
   listActivities,
@@ -78,6 +80,7 @@ import {
   sendLeadEmail,
   updateActivity,
   updateLead,
+  updateNote,
   addNote,
   type GmailAccountOption,
   type Lead,
@@ -87,6 +90,7 @@ import {
   type LeadTimelineEntry,
   type NoteAttachment,
 } from "@/lib/crm"
+import { useSession } from "@/lib/auth-client"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -287,10 +291,16 @@ function TimelineEntryRow({
   entry,
   collapsible = false,
   onMaximize,
+  currentUserId,
+  onEdit,
+  onDelete,
 }: {
   entry: LeadTimelineEntry
   collapsible?: boolean
   onMaximize?: (entry: LeadTimelineEntry) => void
+  currentUserId?: string
+  onEdit?: (entry: LeadTimelineEntry) => void
+  onDelete?: (entry: LeadTimelineEntry) => void
 }) {
   if (entry.kind === "system") {
     return (
@@ -312,6 +322,14 @@ function TimelineEntryRow({
   ) : (
     <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed">{entry.body}</p>
   )
+
+  const isOwnNote =
+    entry.kind === "note" && !!currentUserId && entry.authorUserId === currentUserId
+  // Timestamps are equal on creation; any later save marks the note as edited.
+  const wasEdited =
+    entry.kind === "note" &&
+    !!entry.updatedAt &&
+    new Date(entry.updatedAt).getTime() - new Date(entry.createdAt).getTime() > 1000
 
   return (
     <div
@@ -336,6 +354,33 @@ function TimelineEntryRow({
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           <span title={formatDateTime(entry.createdAt)}>{formatRelativeTime(entry.createdAt)}</span>
+          {wasEdited && (
+            <span className="italic" title={`Edited ${formatDateTime(entry.updatedAt)}`}>
+              (edited)
+            </span>
+          )}
+          {isOwnNote && onEdit && (
+            <button
+              type="button"
+              onClick={() => onEdit(entry)}
+              className="-my-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Edit note"
+              title="Edit"
+            >
+              <PenLineIcon className="size-3.5" />
+            </button>
+          )}
+          {isOwnNote && onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(entry)}
+              className="-my-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+              aria-label="Delete note"
+              title="Delete"
+            >
+              <Trash2Icon className="size-3.5" />
+            </button>
+          )}
           {onMaximize && (
             <button
               type="button"
@@ -357,9 +402,17 @@ function TimelineEntryRow({
   )
 }
 
+/** Legacy notes predate rich text; escape their plain body for the editor. */
+function plainBodyToHtml(body: string): string {
+  const escaped = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  return `<p>${escaped.replace(/\n/g, "<br>")}</p>`
+}
+
 export default function CrmLeadDetailPage() {
   const { id } = useParams({ from: "/crm_/$id" })
   const navigate = useNavigate()
+  const { data: session } = useSession()
+  const currentUserId = session?.user?.id
 
   const [lead, setLead] = useState<Lead | null>(null)
   const [stages, setStages] = useState<LeadStage[]>([])
@@ -381,6 +434,10 @@ export default function CrmLeadDetailPage() {
     html: string
     attachments: NoteAttachment[]
   } | null>(null)
+  // A note being edited opens the same dialog prefilled; null means creating.
+  const [editingNote, setEditingNote] = useState<LeadTimelineEntry | null>(null)
+  const [deletingNote, setDeletingNote] = useState<LeadTimelineEntry | null>(null)
+  const [deletingNotePending, setDeletingNotePending] = useState(false)
   const [emailDraft, setEmailDraft] = useState({ to: "", subject: "", body: "", accountId: "" })
   const [submittingComposer, setSubmittingComposer] = useState(false)
 
@@ -594,6 +651,11 @@ export default function CrmLeadDetailPage() {
 
   function handleNoteModalOpenChange(open: boolean) {
     if (!open) {
+      if (editingNote) {
+        // Closing an edit discards unsaved changes; the create draft is untouched.
+        setEditingNote(null)
+        return
+      }
       // Closing without logging keeps the draft for the next open.
       const payload = noteEditorRef.current?.getPayload()
       setNoteDraft(
@@ -618,19 +680,46 @@ export default function CrmLeadDetailPage() {
     }
     setSubmittingNote(true)
     try {
-      const entry = await addNote(id, {
+      const notePayload = {
         body: payload.body,
         bodyHtml: payload.bodyHtml,
         attachments: payload.attachments,
         mentionedUserIds: payload.mentionedUserIds,
-      })
-      setTimeline((prev) => [entry, ...prev])
-      setNoteDraft(null)
-      setNoteModalOpen(false)
+      }
+      if (editingNote) {
+        const entry = await updateNote(id, editingNote._id, notePayload)
+        setTimeline((prev) => prev.map((item) => (item._id === entry._id ? entry : item)))
+        setEditingNote(null)
+      } else {
+        const entry = await addNote(id, notePayload)
+        setTimeline((prev) => [entry, ...prev])
+        setNoteDraft(null)
+        setNoteModalOpen(false)
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to log the note")
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : editingNote
+            ? "Failed to update the note"
+            : "Failed to log the note"
+      )
     } finally {
       setSubmittingNote(false)
+    }
+  }
+
+  async function handleNoteDeleteConfirm() {
+    if (!deletingNote) return
+    setDeletingNotePending(true)
+    try {
+      await deleteNote(id, deletingNote._id)
+      setTimeline((prev) => prev.filter((item) => item._id !== deletingNote._id))
+      setDeletingNote(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete the note")
+    } finally {
+      setDeletingNotePending(false)
     }
   }
 
@@ -1097,6 +1186,9 @@ export default function CrmLeadDetailPage() {
                           entry={entry}
                           collapsible
                           onMaximize={setMaximizedEntry}
+                          currentUserId={currentUserId}
+                          onEdit={setEditingNote}
+                          onDelete={setDeletingNote}
                         />
                       ))}
                     </div>
@@ -1137,7 +1229,7 @@ export default function CrmLeadDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={noteModalOpen} onOpenChange={handleNoteModalOpenChange}>
+      <Dialog open={noteModalOpen || editingNote !== null} onOpenChange={handleNoteModalOpenChange}>
         <DialogContent
           className="flex h-[min(85vh,52rem)] flex-col gap-0 p-0 sm:max-w-3xl"
           // Escape while the "@" mention menu is open should only dismiss the
@@ -1155,7 +1247,7 @@ export default function CrmLeadDetailPage() {
           }}
         >
           <DialogHeader className="border-b px-5 py-4 text-left">
-            <DialogTitle>Log Note</DialogTitle>
+            <DialogTitle>{editingNote ? "Edit Note" : "Log Note"}</DialogTitle>
             <DialogDescription>
               {lead ? `Internal note on "${lead.title}" — ` : "Internal note — "}
               only your team can see it.
@@ -1164,20 +1256,27 @@ export default function CrmLeadDetailPage() {
           <div className="min-h-0 flex-1 p-4">
             <Suspense fallback={<Skeleton className="h-full w-full rounded-md" />}>
               <NoteEditor
+                // Remount when switching between the create draft and an edit.
+                key={editingNote?._id ?? "new-note"}
                 size="large"
                 autoFocus
                 apiRef={noteEditorRef}
                 disabled={submittingNote}
                 onSubmitShortcut={() => void handleNoteSubmit()}
-                initialHtml={noteDraft?.html}
-                initialAttachments={noteDraft?.attachments}
+                initialHtml={
+                  editingNote
+                    ? (editingNote.bodyHtml ?? plainBodyToHtml(editingNote.body))
+                    : noteDraft?.html
+                }
+                initialAttachments={editingNote ? editingNote.attachments : noteDraft?.attachments}
                 className="h-full"
               />
             </Suspense>
           </div>
           <DialogFooter className="border-t px-4 py-3">
             <p className="mr-auto hidden self-center text-[11px] text-muted-foreground sm:block">
-              Paste or drop images and files straight into the note. ⌘⏎ to log.
+              Paste or drop images and files straight into the note. ⌘⏎ to{" "}
+              {editingNote ? "save" : "log"}.
             </p>
             <Button
               variant="outline"
@@ -1187,8 +1286,47 @@ export default function CrmLeadDetailPage() {
               Cancel
             </Button>
             <Button onClick={() => void handleNoteSubmit()} disabled={submittingNote}>
-              {submittingNote ? <Spinner data-icon="inline-start" /> : <PlusIcon className="size-4" />}
-              Log Note
+              {submittingNote ? (
+                <Spinner data-icon="inline-start" />
+              ) : editingNote ? (
+                <CheckIcon className="size-4" />
+              ) : (
+                <PlusIcon className="size-4" />
+              )}
+              {editingNote ? "Save Changes" : "Log Note"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deletingNote !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingNote(null)
+        }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete Note</DialogTitle>
+            <DialogDescription>
+              This permanently removes the note from the lead's history. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeletingNote(null)}
+              disabled={deletingNotePending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleNoteDeleteConfirm()}
+              disabled={deletingNotePending}
+            >
+              {deletingNotePending && <Spinner data-icon="inline-start" />}
+              Delete Note
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1260,7 +1398,13 @@ export default function CrmLeadDetailPage() {
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-5">
             {timeline.map((entry) => (
-              <TimelineEntryRow key={entry._id} entry={entry} />
+              <TimelineEntryRow
+                key={entry._id}
+                entry={entry}
+                currentUserId={currentUserId}
+                onEdit={setEditingNote}
+                onDelete={setDeletingNote}
+              />
             ))}
           </div>
         </DialogContent>
