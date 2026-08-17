@@ -12,9 +12,12 @@ import {
   PROJECT_STATUSES,
   PROJECT_VISIBILITY_MODES,
   type IProject,
+  type IProjectTaskAttachment,
   type ProjectStatus,
   type ProjectVisibilityMode,
 } from "../models/project.model";
+import { htmlToPlainText, sanitizeRichTextHtml } from "../services/rich-text.service";
+import { keyBelongsToPrefix } from "../services/storage.service";
 import {
   ensureEmployeesBelongToOrganization,
   ensureTeamsBelongToOrganization,
@@ -32,6 +35,10 @@ const DEFAULT_STAGES = [
   { name: "Done", color: "#16a34a" },
 ] as const;
 const SEARCH_FIELDS = ["title", "description"] as const;
+// Mirrors the CRM note limits: rich HTML plus a derived plain-text body.
+const TASK_DESCRIPTION_TEXT_MAX_LENGTH = 10_000;
+const TASK_DESCRIPTION_HTML_MAX_LENGTH = 200_000;
+const TASK_MAX_ATTACHMENTS = 10;
 
 function stringValue(value: unknown): string {
   return String(value ?? "").trim();
@@ -141,6 +148,37 @@ function validateProjectInput(input: Partial<IProject>): string | null {
   return null;
 }
 
+/**
+ * Validates client-supplied attachment references. Only files the caller's
+ * own organization uploaded through the projects scope can be referenced,
+ * otherwise a task could expose another tenant's files. Returns null when the
+ * payload is invalid.
+ */
+function normalizeTaskAttachments(
+  value: unknown,
+  organizationId: string
+): IProjectTaskAttachment[] | null {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return null;
+  const attachments: IProjectTaskAttachment[] = [];
+  for (const item of value.slice(0, TASK_MAX_ATTACHMENTS)) {
+    const record = item as Record<string, unknown>;
+    const key = stringValue(record?.key);
+    const name = stringValue(record?.name);
+    const contentType = stringValue(record?.contentType);
+    const size = Number(record?.size ?? 0);
+    if (!key || !name || !contentType || !Number.isFinite(size) || size <= 0) return null;
+    if (!keyBelongsToPrefix(key, ["projects", organizationId])) return null;
+    attachments.push({
+      key,
+      name: name.slice(0, 200),
+      contentType: contentType.slice(0, 120),
+      size,
+    });
+  }
+  return attachments;
+}
+
 async function normalizeTaskInput(
   body: Record<string, unknown>,
   organizationId: Types.ObjectId,
@@ -150,6 +188,8 @@ async function normalizeTaskInput(
   const input: Partial<{
     title: string;
     description: string | null;
+    descriptionHtml: string | null;
+    attachments: IProjectTaskAttachment[];
     stageId: Types.ObjectId;
     assigneeIds: Types.ObjectId[];
     startDate: Date | null;
@@ -158,7 +198,31 @@ async function normalizeTaskInput(
   }> = {};
 
   if (!partial || "title" in body) input.title = stringValue(body.title);
-  if (!partial || "description" in body) input.description = nullableString(body.description);
+  if (!partial || "description" in body || "descriptionHtml" in body) {
+    const rawHtml = nullableString(body.descriptionHtml);
+    if (rawHtml && rawHtml.length > TASK_DESCRIPTION_HTML_MAX_LENGTH) {
+      throw Object.assign(new Error("Task description is too long"), { statusCode: 400 });
+    }
+    if (rawHtml) {
+      const sanitizedHtml = sanitizeRichTextHtml(rawHtml);
+      // The plain-text description is derived server-side (not trusted from
+      // the client) because it feeds search and board previews.
+      const plainText = htmlToPlainText(sanitizedHtml).slice(0, TASK_DESCRIPTION_TEXT_MAX_LENGTH);
+      const hasInlineContent = /<(img|span)[\s>]/i.test(sanitizedHtml);
+      input.descriptionHtml = sanitizedHtml;
+      input.description = plainText || (hasInlineContent ? "(attachment)" : null);
+    } else {
+      input.description = nullableString(body.description);
+      input.descriptionHtml = null;
+    }
+  }
+  if (!partial || "attachments" in body) {
+    const attachments = normalizeTaskAttachments(body.attachments, organizationId.toString());
+    if (attachments === null) {
+      throw Object.assign(new Error("Invalid task attachments"), { statusCode: 400 });
+    }
+    input.attachments = attachments;
+  }
   if (!partial || "startDate" in body) input.startDate = parseDate(body.startDate);
   if (!partial || "dueDate" in body) input.dueDate = parseDate(body.dueDate);
   if (!partial || "estimatedMinutes" in body) input.estimatedMinutes = normalizeMinutes(body.estimatedMinutes);

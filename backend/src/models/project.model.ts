@@ -53,6 +53,13 @@ export interface IProjectStage extends Document<Types.ObjectId> {
   updatedAt: Date;
 }
 
+export interface IProjectTaskAttachment {
+  key: string;
+  name: string;
+  contentType: string;
+  size: number;
+}
+
 export interface IProjectTask extends Document<Types.ObjectId> {
   organizationId: Types.ObjectId;
   projectId: Types.ObjectId;
@@ -60,6 +67,9 @@ export interface IProjectTask extends Document<Types.ObjectId> {
   parentTaskId: Types.ObjectId | null;
   title: string;
   description: string | null;
+  /** Sanitized rich-text HTML; null on plain-text / legacy tasks. */
+  descriptionHtml: string | null;
+  attachments: IProjectTaskAttachment[];
   assigneeIds: Types.ObjectId[];
   startDate: Date | null;
   dueDate: Date | null;
@@ -193,6 +203,21 @@ const projectTaskSchema = new Schema<IProjectTask>(
     },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: null, trim: true },
+    descriptionHtml: { type: String, default: null },
+    attachments: {
+      type: [
+        new Schema<IProjectTaskAttachment>(
+          {
+            key: { type: String, required: true },
+            name: { type: String, required: true },
+            contentType: { type: String, required: true },
+            size: { type: Number, required: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
     assigneeIds: { ...objectIdArray, ref: "Employee" },
     startDate: { type: Date, default: null },
     dueDate: { type: Date, default: null },

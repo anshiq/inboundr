@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import { ArchiveIcon, ArrowLeftIcon, ClockIcon, FolderKanbanIcon, PlusIcon, SaveIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import type { RichEditorApi } from "@/components/editor/rich-editor"
 import {
   archiveProjectTask,
   createProjectSubtask,
@@ -38,9 +39,11 @@ import {
   type ProjectEmployee,
 } from "@/lib/projects"
 
+// TipTap and its extensions only load when someone opens a task page.
+const RichEditor = lazy(() => import("@/components/editor/rich-editor"))
+
 type TaskForm = {
   title: string
-  description: string
   stageId: string
   assigneeIds: string[]
   startDate: string
@@ -50,12 +53,29 @@ type TaskForm = {
 
 const emptyTaskForm: TaskForm = {
   title: "",
-  description: "",
   stageId: "",
   assigneeIds: [],
   startDate: "",
   dueDate: "",
   estimatedMinutes: "",
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+/** Legacy tasks only have a plain description; render it as paragraphs. */
+function plainTextToHtml(text: string): string {
+  return text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `<p>${escapeHtml(line)}</p>`)
+    .join("")
 }
 
 export default function ProjectTaskPage() {
@@ -67,6 +87,7 @@ export default function ProjectTaskPage() {
   const [taskForm, setTaskForm] = useState<TaskForm>(emptyTaskForm)
   const [timeEntryForm, setTimeEntryForm] = useState({ employeeId: "", minutes: "", workDate: todayInputValue(), notes: "" })
   const [subtaskTitle, setSubtaskTitle] = useState("")
+  const descriptionEditorRef = useRef<RichEditorApi | null>(null)
 
   const refresh = useCallback(async () => {
     const [projectDetail, referenceData] = await Promise.all([getProject(id), getProjectReferenceData()])
@@ -94,7 +115,6 @@ export default function ProjectTaskPage() {
     if (!task) return
     setTaskForm({
       title: task.title,
-      description: task.description ?? "",
       stageId: task.stageId,
       assigneeIds: task.assigneeIds,
       startDate: dateInputValue(task.startDate),
@@ -120,10 +140,21 @@ export default function ProjectTaskPage() {
       toast.error("Task title is required")
       return
     }
+    if (descriptionEditorRef.current?.isUploading()) {
+      toast.error("Wait for the file upload to finish")
+      return
+    }
+    const description = descriptionEditorRef.current?.getPayload()
     try {
       await updateProjectTask(project._id, task._id, {
         title: taskForm.title.trim(),
-        description: taskForm.description.trim() || null,
+        ...(description
+          ? {
+              descriptionHtml: description.isEmpty ? null : description.bodyHtml,
+              description: description.isEmpty ? null : description.body,
+              attachments: description.attachments,
+            }
+          : {}),
         stageId: taskForm.stageId,
         assigneeIds: taskForm.assigneeIds,
         startDate: taskForm.startDate || null,
@@ -255,11 +286,19 @@ export default function ProjectTaskPage() {
           </Field>
           <Field>
             <FieldLabel>Description</FieldLabel>
-            <textarea
-              value={taskForm.description}
-              onChange={(event) => setTaskForm((current) => ({ ...current, description: event.target.value }))}
-              className="min-h-28 rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
+            <Suspense fallback={<div className="min-h-28 animate-pulse rounded-md bg-muted/40" />}>
+              <RichEditor
+                key={task._id}
+                apiRef={descriptionEditorRef}
+                uploadScope="projects"
+                enableSlashMenu
+                placeholder="Describe the task... (type '/' to insert files, forms, and more)"
+                initialHtml={
+                  task.descriptionHtml ?? (task.description ? plainTextToHtml(task.description) : "")
+                }
+                initialAttachments={task.attachments ?? []}
+              />
+            </Suspense>
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field>

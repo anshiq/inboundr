@@ -1,4 +1,5 @@
 import { API_ORIGIN } from "@/lib/env"
+import type { EditorAttachment } from "@/lib/editor-files"
 
 const API_BASE = `${API_ORIGIN}/api/v1/projects`
 
@@ -56,6 +57,9 @@ export interface ProjectTask {
   parentTaskId: string | null
   title: string
   description: string | null
+  /** Sanitized rich-text HTML; absent/null on plain-text and legacy tasks. */
+  descriptionHtml?: string | null
+  attachments?: EditorAttachment[]
   assigneeIds: string[]
   startDate: string | null
   dueDate: string | null
@@ -138,6 +142,9 @@ export interface ProjectPayload {
 export interface TaskPayload {
   title: string
   description?: string | null
+  /** Rich HTML body; the server derives the plain description from it. */
+  descriptionHtml?: string | null
+  attachments?: EditorAttachment[]
   stageId: string
   assigneeIds?: string[]
   startDate?: string | null
