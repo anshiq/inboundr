@@ -1,4 +1,4 @@
-import { ArrowDownIcon, CopyIcon, ExternalLinkIcon, PhoneIcon, RefreshCcwIcon } from "lucide-react"
+import { CopyIcon, ExternalLinkIcon, LinkIcon, PhoneIcon, RefreshCcwIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -13,7 +13,7 @@ export function ChatWidgetLink({ link }: { link: string }) {
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2">
-          <ArrowDownIcon />
+          <LinkIcon />
           Chat Link
         </Button>
       </PopoverTrigger>
