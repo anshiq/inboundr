@@ -3,8 +3,14 @@ import { InboxIcon, LockIcon, SearchIcon, XIcon } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn, getAvatarColor } from "@/lib/utils"
+import {
+  ConversationFilters,
+  formatDayRange,
+  SORT_LABELS,
+  type ConversationFilterValue,
+} from "./conversation-filters"
 import { formatRelativeTime, initialsFromName, isUnread } from "./support-utils"
-import type { Ticket, TicketFilter } from "./types"
+import type { ResolutionReason, SupportTicketTag, Ticket, TicketFilter } from "./types"
 
 const TICKET_FILTERS: { value: TicketFilter; label: string }[] = [
   { value: "open", label: "Open" },
@@ -130,6 +136,19 @@ function ListSkeleton() {
   )
 }
 
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onRemove}
+      className="inline-flex max-w-full items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs transition-colors hover:bg-muted"
+    >
+      <span className="truncate">{label}</span>
+      <XIcon className="size-3 shrink-0 text-muted-foreground" />
+    </button>
+  )
+}
+
 export function ConversationList({
   filter,
   onFilterChange,
@@ -140,6 +159,11 @@ export function ConversationList({
   onSelect,
   search,
   onSearchChange,
+  filters,
+  onFiltersChange,
+  onFiltersClear,
+  ticketTags,
+  resolutionReasons,
 }: {
   filter: TicketFilter
   onFilterChange: (filter: TicketFilter) => void
@@ -150,28 +174,50 @@ export function ConversationList({
   onSelect: (id: string) => void
   search: string
   onSearchChange: (value: string) => void
+  filters: ConversationFilterValue
+  onFiltersChange: (patch: Partial<ConversationFilterValue>) => void
+  onFiltersClear: () => void
+  ticketTags: SupportTicketTag[]
+  resolutionReasons: ResolutionReason[]
 }) {
+  const hasDateFilter = Boolean(filters.from || filters.to)
+  const activeReason = filters.reason
+    ? resolutionReasons.find((reason) => reason.id === filters.reason)
+    : null
+  const hasChips =
+    filters.sort !== "recent" || filters.tags.length > 0 || hasDateFilter || Boolean(activeReason)
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="space-y-2.5 border-b p-3">
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search conversations..."
-            className="h-9 w-full rounded-lg border border-input bg-transparent pr-8 pl-8 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+        <div className="flex items-center gap-1.5">
+          <div className="relative min-w-0 flex-1">
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Search conversations..."
+              className="h-9 w-full rounded-lg border border-input bg-transparent pr-8 pl-8 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+            />
+            {search && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => onSearchChange("")}
+                className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            )}
+          </div>
+          <ConversationFilters
+            value={filters}
+            status={filter}
+            ticketTags={ticketTags}
+            resolutionReasons={resolutionReasons}
+            onChange={onFiltersChange}
+            onClear={onFiltersClear}
           />
-          {search && (
-            <button
-              type="button"
-              aria-label="Clear search"
-              onClick={() => onSearchChange("")}
-              className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <XIcon className="size-3.5" />
-            </button>
-          )}
         </div>
         <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
           {TICKET_FILTERS.map((item) => {
@@ -203,6 +249,41 @@ export function ConversationList({
             )
           })}
         </div>
+        {hasChips && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {filters.sort !== "recent" && (
+              <FilterChip
+                label={SORT_LABELS[filters.sort]}
+                onRemove={() => onFiltersChange({ sort: "recent" })}
+              />
+            )}
+            {hasDateFilter && (
+              <FilterChip
+                label={`${filters.dateField === "activity" ? "Active" : "Created"}: ${formatDayRange(filters.from, filters.to)}`}
+                onRemove={() => onFiltersChange({ from: "", to: "" })}
+              />
+            )}
+            {activeReason && (
+              <FilterChip
+                label={activeReason.label}
+                onRemove={() => onFiltersChange({ reason: "" })}
+              />
+            )}
+            {filters.tags.map((tagId) => {
+              const tag = ticketTags.find((item) => item.id === tagId)
+              if (!tag) return null
+              return (
+                <FilterChip
+                  key={tagId}
+                  label={tag.name}
+                  onRemove={() =>
+                    onFiltersChange({ tags: filters.tags.filter((id) => id !== tagId) })
+                  }
+                />
+              )
+            })}
+          </div>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
@@ -214,12 +295,14 @@ export function ConversationList({
               <InboxIcon className="size-7 text-muted-foreground" />
             </div>
             <p className="text-sm font-medium text-foreground">
-              {search ? "No Matches Found" : "No Conversations Yet"}
+              {search || hasChips ? "No Matches Found" : "No Conversations Yet"}
             </p>
             <p className="mt-1 max-w-[15rem] text-sm text-muted-foreground">
               {search
                 ? "Try a different name, email, or ticket number."
-                : "New support chats from your customers will appear here."}
+                : hasChips
+                  ? "Try adjusting or clearing the active filters."
+                  : "New support chats from your customers will appear here."}
             </p>
           </div>
         ) : (

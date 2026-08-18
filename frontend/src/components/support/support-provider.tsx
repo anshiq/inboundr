@@ -81,13 +81,32 @@ export type SendMessageInput = {
   isInternal?: boolean
 }
 
+export type SupportListSort = "recent" | "newest" | "oldest" | "most_messages"
+export type SupportDateField = "created" | "activity"
+
 export type SupportListQuery = {
   status: TicketFilter
   search: string
   tags: string[]
   resolutionReason: string
+  sort: SupportListSort
+  dateField: SupportDateField
+  /** Inclusive range bounds as YYYY-MM-DD in the user's local timezone. */
+  dateFrom: string
+  dateTo: string
   page: number
   limit: number
+}
+
+/** Convert a local YYYY-MM-DD day into an ISO timestamp at the start or end
+ * of that day, so the backend range matches the user's timezone. */
+function dayToIso(day: string, edge: "start" | "end"): string {
+  const [year, month, date] = day.split("-").map(Number)
+  const value =
+    edge === "start"
+      ? new Date(year, month - 1, date, 0, 0, 0, 0)
+      : new Date(year, month - 1, date, 23, 59, 59, 999)
+  return value.toISOString()
 }
 
 function ticketMatchesTagFilter(ticket: Ticket, tagIds: string[]) {
@@ -113,6 +132,10 @@ const DEFAULT_QUERY: SupportListQuery = {
   search: "",
   tags: [],
   resolutionReason: "",
+  sort: "recent",
+  dateField: "created",
+  dateFrom: "",
+  dateTo: "",
   page: 1,
   limit: DEFAULT_PAGE_SIZE,
 }
@@ -229,6 +252,12 @@ function useSupportInboxValue() {
         if (query.search.trim()) params.set("search", query.search.trim())
         if (query.tags.length > 0) params.set("tags", query.tags.join(","))
         if (query.resolutionReason) params.set("resolutionReason", query.resolutionReason)
+        if (query.sort !== "recent") params.set("sort", query.sort)
+        if (query.dateFrom || query.dateTo) {
+          params.set("dateField", query.dateField)
+          if (query.dateFrom) params.set("dateFrom", dayToIso(query.dateFrom, "start"))
+          if (query.dateTo) params.set("dateTo", dayToIso(query.dateTo, "end"))
+        }
         const response = await fetch(`${apiBase}?${params.toString()}`, { credentials: "include" })
         const body = await response.json().catch(() => null)
         if (!response.ok) throw new Error(body?.error ?? "Failed to load support tickets")
@@ -325,11 +354,17 @@ function useSupportInboxValue() {
         if (payload.type === "ticket.updated") {
           const query = queryRef.current
           const filter = query.status
+          // With a non-default sort or a date filter active, list membership
+          // and ordering can't be computed client-side, so never auto-insert
+          // and keep existing rows in place instead of re-sorting by recency.
+          const defaultOrdering =
+            query.sort === "recent" && !query.dateFrom && !query.dateTo
           let insertedNewTicket = false
           setTickets((current) => {
             const existing = current.find((ticket) => ticket.id === payload.ticket.id)
             if (!existing) {
               if (
+                !defaultOrdering ||
                 query.page !== 1 ||
                 !ticketMatchesFilter(payload.ticket, filter) ||
                 !ticketMatchesSearchQuery(payload.ticket, query.search) ||
@@ -356,6 +391,9 @@ function useSupportInboxValue() {
             )
               return without
             const merged = ticketWithPreviewFallback(payload.ticket, existing)
+            if (!defaultOrdering) {
+              return current.map((ticket) => (ticket.id === merged.id ? merged : ticket))
+            }
             return [merged, ...without].sort(byRecency)
           })
           if (insertedNewTicket) playNewChatSound()
@@ -378,7 +416,10 @@ function useSupportInboxValue() {
             return [...current, message]
           })
           setTickets((current) => {
+            const query = queryRef.current
             const bump = !message.isInternal
+            const resort =
+              bump && query.sort === "recent" && !query.dateFrom && !query.dateTo
             const next = current.map((ticket) =>
               ticket.id === message.ticketId
                 ? {
@@ -390,7 +431,7 @@ function useSupportInboxValue() {
                   }
                 : ticket
             )
-            return bump ? [...next].sort(byRecency) : next
+            return resort ? [...next].sort(byRecency) : next
           })
           if (message.ticketId === selectedTicketIdRef.current && message.authorType === "visitor") {
             socket.send(JSON.stringify({ type: "mark_read", ticketId: message.ticketId }))
