@@ -622,6 +622,7 @@ export function ContextPanel({
                 value={ticket.requester.phoneNumber}
                 label="Phone number copied"
                 className="font-medium"
+                iconPosition="start"
               >
                 <span className="truncate">{ticket.requester.phoneNumber}</span>
               </CopyableText>

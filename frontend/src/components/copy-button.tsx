@@ -38,33 +38,40 @@ export function CopyableText({
   label,
   children,
   className = "",
+  iconPosition = "end",
 }: {
   value: string
   label?: string
   children: React.ReactNode
   className?: string
+  iconPosition?: "start" | "end"
 }) {
   const [copied, setCopied] = useState(false)
 
+  const button = (
+    <button
+      type="button"
+      className="inline-flex shrink-0 items-center justify-center rounded-md p-0.5 text-muted-foreground/40 opacity-0 transition-all hover:text-foreground group-hover/copy:opacity-100 focus-visible:opacity-100"
+      onClick={(e) => {
+        e.stopPropagation()
+        copyToClipboard(value, label)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      }}
+    >
+      {copied ? (
+        <CheckIcon className="size-3 text-success" />
+      ) : (
+        <CopyIcon className="size-3" />
+      )}
+    </button>
+  )
+
   return (
     <span className={`group/copy inline-flex items-center gap-1 ${className}`}>
+      {iconPosition === "start" && button}
       {children}
-      <button
-        type="button"
-        className="inline-flex shrink-0 items-center justify-center rounded-md p-0.5 text-muted-foreground/40 opacity-0 transition-all hover:text-foreground group-hover/copy:opacity-100 focus-visible:opacity-100"
-        onClick={(e) => {
-          e.stopPropagation()
-          copyToClipboard(value, label)
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
-        }}
-      >
-        {copied ? (
-          <CheckIcon className="size-3 text-success" />
-        ) : (
-          <CopyIcon className="size-3" />
-        )}
-      </button>
+      {iconPosition === "end" && button}
     </span>
   )
 }
