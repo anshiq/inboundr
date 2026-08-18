@@ -12,6 +12,7 @@ import { toast } from "sonner"
 import { AppLayout } from "@/components/app-layout"
 import { SiteHeader } from "@/components/site-header"
 import { ContextPanel } from "@/components/support/context-panel"
+import type { ConversationFilterValue } from "@/components/support/conversation-filters"
 import { ConversationList } from "@/components/support/conversation-list"
 import { ConversationView } from "@/components/support/conversation-view"
 import {
@@ -123,11 +124,15 @@ export default function SupportInboxPage() {
       search: search.q,
       tags: search.tags,
       resolutionReason: search.reason,
+      sort: search.sort,
+      dateField: search.dateField,
+      dateFrom: search.from,
+      dateTo: search.to,
       page: search.page,
       limit: PAGE_SIZE,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadTickets, search.status, search.q, tagsKey, search.reason, search.page])
+  }, [loadTickets, search.status, search.q, tagsKey, search.reason, search.sort, search.dateField, search.from, search.to, search.page])
 
   // The URL param drives which conversation is loaded in the thread pane.
   const sawLoading = useRef(false)
@@ -170,6 +175,27 @@ export default function SupportInboxPage() {
     updateSearch({ status, reason: status === "resolved" ? search.reason : "", page: 1 })
   const setPage = (page: number) => updateSearch({ page })
 
+  const filters: ConversationFilterValue = {
+    sort: search.sort,
+    tags: search.tags,
+    reason: search.reason,
+    dateField: search.dateField,
+    from: search.from,
+    to: search.to,
+  }
+  const changeFilters = (patch: Partial<ConversationFilterValue>) =>
+    updateSearch({ ...patch, page: 1 })
+  const clearFilters = () =>
+    updateSearch({
+      sort: "recent",
+      tags: [],
+      reason: "",
+      dateField: "created",
+      from: "",
+      to: "",
+      page: 1,
+    })
+
   const [detailsOpen, setDetailsOpen] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -211,12 +237,18 @@ export default function SupportInboxPage() {
           onSelect={openTicket}
           search={searchInput}
           onSearchChange={setSearchInput}
+          filters={filters}
+          onFiltersChange={changeFilters}
+          onFiltersClear={clearFilters}
+          ticketTags={inbox.ticketTags}
+          resolutionReasons={inbox.resolutionReasons}
         />
       </div>
-      {!inbox.loadingTickets && pagination.totalPages > 1 && (
+      {!inbox.loadingTickets && pagination.total > 0 && (
         <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
           <p className="text-xs text-muted-foreground tabular-nums">
-            Page {pagination.page} of {pagination.totalPages}
+            {pagination.total === 1 ? "1 conversation" : `${pagination.total} conversations`}
+            {" · "}Page {pagination.page} of {pagination.totalPages}
           </p>
           <div className="flex items-center gap-1">
             <Button

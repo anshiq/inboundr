@@ -9,6 +9,8 @@ import {
   listCustomerCandidates,
   listRelatedTickets,
   listTickets,
+  normalizeTicketListDateField,
+  normalizeTicketListSort,
   normalizeTicketListStatus,
   reopenTicket as reopenTicketRecord,
   resolveTicket as resolveTicketRecord,
@@ -44,6 +46,10 @@ export async function listSupportTickets(req: Request, res: Response): Promise<v
       tagIds,
       resolutionReasonId:
         typeof req.query.resolutionReason === "string" ? req.query.resolutionReason : undefined,
+      sort: normalizeTicketListSort(req.query.sort),
+      dateField: normalizeTicketListDateField(req.query.dateField),
+      dateFrom: typeof req.query.dateFrom === "string" ? req.query.dateFrom : undefined,
+      dateTo: typeof req.query.dateTo === "string" ? req.query.dateTo : undefined,
       page: Number.isFinite(parsedPage) ? parsedPage : undefined,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
     });

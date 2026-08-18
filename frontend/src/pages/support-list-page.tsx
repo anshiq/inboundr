@@ -273,11 +273,15 @@ export default function SupportListPage() {
       search: search.q,
       tags: search.tags,
       resolutionReason: search.reason,
+      sort: search.sort,
+      dateField: search.dateField,
+      dateFrom: search.from,
+      dateTo: search.to,
       page: search.page,
       limit: PAGE_SIZE,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadTickets, search.status, search.q, tagsKey, search.reason, search.page])
+  }, [loadTickets, search.status, search.q, tagsKey, search.reason, search.sort, search.dateField, search.from, search.to, search.page])
 
   const setStatus = (status: TicketFilter) =>
     void navigate({

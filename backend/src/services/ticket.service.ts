@@ -219,12 +219,29 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+export type TicketListSort = "recent" | "newest" | "oldest" | "most_messages";
+export type TicketListDateField = "created" | "activity";
+
+export function normalizeTicketListSort(value: unknown): TicketListSort {
+  return value === "newest" || value === "oldest" || value === "most_messages"
+    ? value
+    : "recent";
+}
+
+export function normalizeTicketListDateField(value: unknown): TicketListDateField {
+  return value === "activity" ? "activity" : "created";
+}
+
 export async function listTickets(input: {
   organizationId: mongoose.Types.ObjectId;
   status: TicketListStatus;
   search?: string;
   tagIds?: string[];
   resolutionReasonId?: string;
+  sort?: TicketListSort;
+  dateField?: TicketListDateField;
+  dateFrom?: string;
+  dateTo?: string;
   page?: number;
   limit?: number;
 }) {
@@ -251,6 +268,16 @@ export async function listTickets(input: {
     match.tagIds = { $in: tagIds };
   }
 
+  const dateFieldPath = input.dateField === "activity" ? "lastMessageAt" : "createdAt";
+  const dateRange: Record<string, Date> = {};
+  const dateFrom = input.dateFrom ? new Date(input.dateFrom) : null;
+  if (dateFrom && !Number.isNaN(dateFrom.getTime())) dateRange.$gte = dateFrom;
+  const dateTo = input.dateTo ? new Date(input.dateTo) : null;
+  if (dateTo && !Number.isNaN(dateTo.getTime())) dateRange.$lte = dateTo;
+  if (Object.keys(dateRange).length > 0) {
+    match[dateFieldPath] = dateRange;
+  }
+
   const search = String(input.search ?? "").trim();
   if (search) {
     const pattern = escapeRegExp(search);
@@ -274,13 +301,50 @@ export async function listTickets(input: {
   const page = Math.max(Math.trunc(input.page ?? 1) || 1, 1);
   const skip = (page - 1) * limit;
 
+  const sort = normalizeTicketListSort(input.sort);
+  const sortStage: Record<string, 1 | -1> =
+    sort === "newest"
+      ? { createdAt: -1 }
+      : sort === "oldest"
+        ? { createdAt: 1 }
+        : sort === "most_messages"
+          ? { messageCount: -1, lastMessageAt: -1 }
+          : { lastMessageAt: -1, createdAt: -1 };
+
+  // Sorting by message volume needs a per-ticket count computed before the
+  // sort; skip the extra lookup for every other sort mode.
+  const preSortStages: any[] =
+    sort === "most_messages"
+      ? [
+          {
+            $lookup: {
+              from: TicketMessage.collection.name,
+              let: { ticketId: "$_id" },
+              pipeline: [
+                { $match: { $expr: { $eq: ["$ticketId", "$$ticketId"] } } },
+                { $count: "value" },
+              ],
+              as: "messageCountLookup",
+            },
+          },
+          {
+            $addFields: {
+              messageCount: {
+                $ifNull: [{ $arrayElemAt: ["$messageCountLookup.value", 0] }, 0],
+              },
+            },
+          },
+        ]
+      : [];
+
   const [result] = await Ticket.aggregate([
     { $match: match },
     {
       $facet: {
         total: [{ $count: "value" }],
         data: [
-          { $sort: { lastMessageAt: -1, createdAt: -1 } },
+          ...preSortStages,
+          { $sort: sortStage },
           { $skip: skip },
           { $limit: limit },
           {
