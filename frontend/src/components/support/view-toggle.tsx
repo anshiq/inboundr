@@ -1,44 +1,29 @@
-import { Columns2Icon, TableIcon } from "lucide-react"
+import { Columns2Icon } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
-import { setSupportView, useSupportView, type SupportView } from "./use-support-view"
+import { setSupportView, useSupportView } from "./use-support-view"
 
-const VIEWS: { value: SupportView; label: string; icon: typeof Columns2Icon }[] = [
-  { value: "panes", label: "Inbox view", icon: Columns2Icon },
-  { value: "table", label: "Table view", icon: TableIcon },
-]
-
+/** Single icon button that toggles between the panes (inbox) and table views,
+ * mirroring the details-panel toggle in the conversation header. */
 export function SupportViewToggle() {
   const view = useSupportView()
+  const tableActive = view === "table"
 
   return (
-    <div className="flex items-center gap-0.5 rounded-lg bg-muted p-[3px]">
-      {VIEWS.map((item) => {
-        const active = view === item.value
-        const Icon = item.icon
-        return (
-          <Tooltip key={item.value}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={item.label}
-                aria-pressed={active}
-                onClick={() => setSupportView(item.value)}
-                className={cn(
-                  "flex size-7 items-center justify-center rounded-md transition-colors",
-                  active
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Icon className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{item.label}</TooltipContent>
-          </Tooltip>
-        )
-      })}
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={tableActive ? "secondary" : "outline"}
+          size="icon-sm"
+          onClick={() => setSupportView(tableActive ? "panes" : "table")}
+          aria-label="Toggle table view"
+          aria-pressed={tableActive}
+        >
+          <Columns2Icon />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{tableActive ? "Switch to inbox view" : "Switch to table view"}</TooltipContent>
+    </Tooltip>
   )
 }
