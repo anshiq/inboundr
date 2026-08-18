@@ -489,7 +489,7 @@ function SidebarContent({
       <div
         ref={viewportRef}
         onScroll={updateThumb}
-        className="sidebar-scroll h-full overflow-y-auto group-data-[collapsible=icon]:overflow-hidden"
+        className="sidebar-scroll h-full overflow-y-auto group-data-[collapsible=icon]:overflow-x-hidden"
       >
         <div ref={contentRef} className="flex flex-col gap-2">
           {children}
@@ -498,7 +498,7 @@ function SidebarContent({
       {thumb && (
         <div
           onPointerDown={handleTrackPointerDown}
-          className="absolute inset-y-0 right-0 w-2.5 cursor-grab group-data-[collapsible=icon]:hidden"
+          className="absolute inset-y-0 right-0 w-2.5 cursor-grab group-data-[collapsible=icon]:w-1.5"
         >
           <div
             ref={thumbRef}
