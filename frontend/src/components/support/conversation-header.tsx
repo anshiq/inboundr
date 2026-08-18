@@ -64,7 +64,9 @@ export function ConversationHeader({
         : "AI Paused"
 
   return (
-    <div className="border-b">
+    // Sized with container queries (not viewport breakpoints) so the header
+    // adapts to the thread pane's own width in the split inbox layout.
+    <div className="border-b @container">
       {ticket.visitorEndedAt && ticket.status === "open" && (
         <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/[0.08] px-4 py-2 text-xs text-amber-700 dark:text-amber-300">
           <AlertCircleIcon className="size-3.5" />
@@ -72,7 +74,7 @@ export function ConversationHeader({
         </div>
       )}
     <div className="flex items-center justify-between gap-3 px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3 overflow-hidden">
         <Avatar size="lg">
           <AvatarFallback className={cn("font-semibold", avatar.bg, avatar.text)}>
             {initialsFromName(ticket.requester.name)}
@@ -90,16 +92,16 @@ export function ConversationHeader({
               </h2>
             </ContactHoverCard>
             {notesCount > 0 && (
-              <span className="hidden h-5 shrink-0 items-center rounded-full bg-amber-500/15 px-2 text-[11px] font-medium text-amber-700 sm:inline-flex dark:text-amber-300">
+              <span className="hidden h-5 shrink-0 items-center rounded-full bg-amber-500/15 px-2 text-[11px] font-medium text-amber-700 @2xl:inline-flex dark:text-amber-300">
                 {notesCount} {notesCount === 1 ? "Note" : "Notes"}
               </span>
             )}
             {ticket.customer && (
-              <span className="hidden h-5 min-w-0 shrink items-center truncate rounded-full bg-emerald-500/15 px-2 text-[11px] font-medium text-emerald-700 md:inline-flex dark:text-emerald-300">
+              <span className="hidden h-5 min-w-0 shrink items-center truncate rounded-full bg-emerald-500/15 px-2 text-[11px] font-medium text-emerald-700 @3xl:inline-flex dark:text-emerald-300">
                 {ticket.customer.company || ticket.customer.name}
               </span>
             )}
-            <span className="hidden h-5 shrink-0 items-center rounded-full bg-accent px-2 text-[11px] font-medium text-accent-foreground sm:inline-flex">
+            <span className="hidden h-5 shrink-0 items-center rounded-full bg-accent px-2 text-[11px] font-medium text-accent-foreground @xl:inline-flex">
               {aiModeLabel}
             </span>
           </div>
@@ -149,7 +151,7 @@ export function ConversationHeader({
           className="gap-1.5"
         >
           <BotIcon />
-          <span className="hidden sm:inline">
+          <span className="hidden @md:inline">
             {ticket.aiMode === "autonomous" ? "Take Over" : "Resume AI"}
           </span>
         </Button>
@@ -163,7 +165,7 @@ export function ConversationHeader({
           className="gap-1.5"
         >
           {resolved ? <RotateCcwIcon /> : <CheckCircle2Icon />}
-          <span className="hidden sm:inline">{resolved ? "Reopen" : "Resolve"}</span>
+          <span className="hidden @md:inline">{resolved ? "Reopen" : "Resolve"}</span>
         </Button>
 
         <Tooltip>

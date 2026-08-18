@@ -1,4 +1,3 @@
-import { useMemo, useState } from "react"
 import { InboxIcon, LockIcon, SearchIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -11,6 +10,7 @@ const TICKET_FILTERS: { value: TicketFilter; label: string }[] = [
   { value: "open", label: "Open" },
   { value: "resolved", label: "Resolved" },
   { value: "all", label: "All" },
+  { value: "archived", label: "Archived" },
 ]
 
 function previewParts(ticket: Ticket): { prefix: string | null; text: string; note: boolean } {
@@ -138,6 +138,8 @@ export function ConversationList({
   unreadCount,
   selectedTicketId,
   onSelect,
+  search,
+  onSearchChange,
 }: {
   filter: TicketFilter
   onFilterChange: (filter: TicketFilter) => void
@@ -146,31 +148,9 @@ export function ConversationList({
   unreadCount: number
   selectedTicketId: string | null
   onSelect: (id: string) => void
+  search: string
+  onSearchChange: (value: string) => void
 }) {
-  const [search, setSearch] = useState("")
-
-  const visibleTickets = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    if (!query) return tickets
-    return tickets.filter((ticket) => {
-      const haystack = [
-        ticket.requester.name,
-        ticket.requester.email,
-        ticket.customer?.name ?? "",
-        ticket.customer?.company ?? "",
-        ticket.subject,
-        ticket.initialIssue,
-        ticket.lastMessagePreview ?? "",
-        ticket.ticketReference,
-        `#${ticket.ticketNumber}`,
-        String(ticket.ticketNumber),
-      ]
-        .join(" ")
-        .toLowerCase()
-      return haystack.includes(query)
-    })
-  }, [search, tickets])
-
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="space-y-2.5 border-b p-3">
@@ -178,7 +158,7 @@ export function ConversationList({
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Search conversations..."
             className="h-9 w-full rounded-lg border border-input bg-transparent pr-3 pl-8 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
           />
@@ -192,7 +172,7 @@ export function ConversationList({
                 type="button"
                 onClick={() => onFilterChange(item.value)}
                 className={cn(
-                  "inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md text-[13px] font-medium transition-colors",
+                  "inline-flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-1 text-xs font-medium transition-colors",
                   active
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -218,7 +198,7 @@ export function ConversationList({
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {loading ? (
           <ListSkeleton />
-        ) : visibleTickets.length === 0 ? (
+        ) : tickets.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
             <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-muted">
               <InboxIcon className="size-7 text-muted-foreground" />
@@ -234,7 +214,7 @@ export function ConversationList({
           </div>
         ) : (
           <div className="flex flex-col gap-0.5">
-            {visibleTickets.map((ticket) => (
+            {tickets.map((ticket) => (
               <ConversationListItem
                 key={ticket.id}
                 ticket={ticket}
