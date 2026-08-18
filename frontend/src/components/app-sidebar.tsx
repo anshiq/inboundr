@@ -123,6 +123,13 @@ const data: { navMain: SidebarCategory[] } = {
           feature: "assets",
           module: "assets",
         },
+        {
+          title: "Support",
+          url: "/support",
+          icon: <HeadsetIcon />,
+          feature: "support",
+          module: "support",
+        },
       ],
     },
     {
@@ -186,13 +193,6 @@ const data: { navMain: SidebarCategory[] } = {
           icon: <BotMessageSquareIcon />,
           feature: "chat",
           module: "chat",
-        },
-        {
-          title: "Support",
-          url: "/support",
-          icon: <HeadsetIcon />,
-          feature: "support",
-          module: "support",
         },
       ],
     },
