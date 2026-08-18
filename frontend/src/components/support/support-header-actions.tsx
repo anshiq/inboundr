@@ -3,7 +3,7 @@ import { ArrowDownIcon, CopyIcon, ExternalLinkIcon, PhoneIcon, RefreshCcwIcon } 
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { cn, copyToClipboard } from "@/lib/utils"
+import { copyToClipboard } from "@/lib/utils"
 import { useSupport } from "./support-provider"
 import { useAssignedPhoneNumbers, type AssignedPhoneNumber } from "./use-assigned-phone-numbers"
 import { SupportViewToggle } from "./view-toggle"
@@ -69,26 +69,25 @@ function PhoneNumberRow({ number }: { number: AssignedPhoneNumber }) {
   )
 }
 
-/** Connection dot shown in the site header's leading slot on every support surface. */
+/** Shown in the site header's leading slot on every support surface.
+ * Renders nothing while realtime is connected; only surfaces a warning
+ * when the connection is down. */
 export function RealtimeIndicator() {
   const { socketReady } = useSupport()
+  if (socketReady) return null
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span
           role="status"
-          aria-label={socketReady ? "Realtime connected" : "Connecting"}
-          className="flex size-7 items-center justify-center"
+          aria-label="Realtime not connected"
+          className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
         >
-          <span
-            className={cn(
-              "size-2 rounded-full",
-              socketReady ? "bg-emerald-500" : "animate-pulse bg-amber-500"
-            )}
-          />
+          <span className="size-1.5 animate-pulse rounded-full bg-amber-500" />
+          Not connected
         </span>
       </TooltipTrigger>
-      <TooltipContent>{socketReady ? "Realtime" : "Connecting..."}</TooltipContent>
+      <TooltipContent>Live updates are paused while reconnecting</TooltipContent>
     </Tooltip>
   )
 }
