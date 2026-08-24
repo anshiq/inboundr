@@ -40,8 +40,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { formatDate, formatDateTime } from "@/lib/format"
+import { employeesCatalogQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 import {
-  coreApiFetch,
   customerName,
   equipmentName,
   openServiceAttachment,
@@ -129,9 +130,7 @@ export default function ServiceDetailPage() {
   }, [load, revision])
   useEffect(() => {
     Promise.all([
-      coreApiFetch<{ employees?: EmployeeOption[] }>(
-        "/api/v1/employees?limit=100"
-      ),
+      queryClient.fetchQuery(employeesCatalogQueryOptions),
       serviceFetch<ServiceSettingsResponse>("/settings"),
     ])
       .then(([employeeData, settingData]) => {

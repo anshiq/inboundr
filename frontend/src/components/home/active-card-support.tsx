@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { queryOptions, useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { HeadsetIcon, InboxIcon } from "lucide-react"
 
@@ -59,28 +59,23 @@ function TicketRow({ ticket }: { ticket: SupportTicketRow }) {
   )
 }
 
+const openTicketsQueryOptions = queryOptions({
+  queryKey: ["support", "open-tickets-widget"],
+  queryFn: async () => {
+    const res = await fetch(`${API_ORIGIN}/api/v1/tickets?status=open&limit=5`, {
+      credentials: "include",
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return (await res.json()) as SupportListResponse
+  },
+  staleTime: 60_000,
+})
+
 export function SupportActiveCard() {
-  const [data, setData] = useState<SupportListResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { data: queryData, error: queryError } = useQuery(openTicketsQueryOptions)
 
-  useEffect(() => {
-    let active = true
-    fetch(`${API_ORIGIN}/api/v1/tickets?status=open&limit=5`, { credentials: "include" })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return (await res.json()) as SupportListResponse
-      })
-      .then((body) => {
-        if (active) setData(body)
-      })
-      .catch((err: unknown) => {
-        if (active) setError(err instanceof Error ? err.message : "Failed to load tickets")
-      })
-    return () => {
-      active = false
-    }
-  }, [])
-
+  const data = queryData ?? null
+  const error = queryError ? queryError.message || "Failed to load tickets" : null
   const openCount = data?.total ?? 0
 
   return (

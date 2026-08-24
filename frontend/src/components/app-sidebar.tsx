@@ -10,9 +10,11 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { useQuery } from "@tanstack/react-query"
+
 import { useSession } from "@/lib/auth-client"
 import { resolveUploadedImageUrl } from "@/lib/uploaded-image"
-import { getAdminMe } from "@/lib/admin"
+import { adminMeQueryOptions } from "@/lib/queries/admin"
 import { ProBadge } from "@/components/pro-badge"
 import { useEntitlements, type EmployeeAccessModule, type FeatureKey } from "@/lib/entitlements"
 import { useOrganizationBranding } from "@/lib/organization-branding"
@@ -211,7 +213,8 @@ const data: { navMain: SidebarCategory[] } = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = useSession()
-  const [isSuperAdmin, setIsSuperAdmin] = React.useState(false)
+  const { data: adminMe } = useQuery(adminMeQueryOptions)
+  const isSuperAdmin = adminMe?.isSuperAdmin ?? false
   const { hasFeature, hasModuleAccess } = useEntitlements()
   const { branding, loading } = useOrganizationBranding()
   const [avatarUrl, setAvatarUrl] = React.useState("")
@@ -272,10 +275,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
     return categories
   }, [hasFeature, hasModuleAccess, isSuperAdmin])
-
-  React.useEffect(() => {
-    void getAdminMe().then(({ isSuperAdmin }) => setIsSuperAdmin(isSuperAdmin))
-  }, [])
 
   return (
     <Sidebar

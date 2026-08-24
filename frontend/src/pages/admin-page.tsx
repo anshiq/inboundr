@@ -33,6 +33,8 @@ import { Spinner } from "@/components/ui/spinner"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { API_ORIGIN } from "@/lib/env"
+import { adminPlansQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 import { formatDate, formatDateTime } from "@/lib/format"
 
 interface Plan {
@@ -279,12 +281,12 @@ export default function AdminPage() {
   async function load() {
     setLoading(true)
     try {
-      const [orgResponse, planResponse] = await Promise.all([
+      const [orgResponse, planData] = await Promise.all([
         fetch(`${API_ORIGIN}/api/v1/admin/organizations`, { credentials: "include" }),
-        fetch(`${API_ORIGIN}/api/v1/admin/plans`, { credentials: "include" }),
+        queryClient.fetchQuery(adminPlansQueryOptions),
       ])
-      if (!orgResponse.ok || !planResponse.ok) throw new Error("Failed to load admin data")
-      const [orgData, planData] = await Promise.all([orgResponse.json(), planResponse.json()])
+      if (!orgResponse.ok) throw new Error("Failed to load admin data")
+      const orgData = await orgResponse.json()
       const nextOrganizations = orgData.organizations ?? []
       setOrganizations(nextOrganizations)
       setSummary(orgData.summary ?? emptySummary)

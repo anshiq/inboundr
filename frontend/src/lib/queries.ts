@@ -90,7 +90,17 @@ export function installQueryCacheListeners() {
   window.addEventListener(ACTIVE_ORGANIZATION_CHANGED_EVENT, (event) => {
     const organizationId = (event as CustomEvent<{ organizationId?: string }>).detail?.organizationId
     if (organizationId && organizationId !== lastLoadedOrganizationId) {
-      void invalidateOrganizationMe()
+      // A genuine org switch changes the x-organization-id header on every
+      // API call, so all cached data is potentially for the wrong org.
+      void queryClient.invalidateQueries()
     }
   })
 }
+
+export * from "@/lib/queries/admin"
+export * from "@/lib/queries/catalogs"
+export * from "@/lib/queries/customer-fields"
+export * from "@/lib/queries/gmail"
+export * from "@/lib/queries/invoices"
+export * from "@/lib/queries/organization-members"
+export * from "@/lib/queries/support"

@@ -25,8 +25,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatDate, formatDateTime } from "@/lib/format"
+import { employeesCatalogQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 import {
-  coreApiFetch,
   customerName,
   equipmentName,
   PRIORITY_LABELS,
@@ -121,9 +122,7 @@ export default function ServiceRequestsPage() {
 
   useEffect(() => {
     Promise.all([
-      coreApiFetch<{ employees?: EmployeeOption[] }>(
-        "/api/v1/employees?limit=100"
-      ),
+      queryClient.fetchQuery(employeesCatalogQueryOptions),
       serviceFetch<ServiceSettingsResponse>("/settings"),
     ])
       .then(([employeeData, settingsData]) => {

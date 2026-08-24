@@ -1,7 +1,7 @@
 import { redirect } from "@tanstack/react-router"
 
 import { clearOrganizationSessionStorage } from "@/lib/auth-storage"
-import { getAdminMe } from "@/lib/admin"
+import { adminMeQueryOptions } from "@/lib/queries/admin"
 import {
   organizationMeQueryOptions,
   sessionQueryOptions,
@@ -38,7 +38,7 @@ export async function redirectIfAuthenticated() {
 
 export async function requireSuperAdmin() {
   await requireSession()
-  const { isSuperAdmin } = await getAdminMe()
+  const { isSuperAdmin } = await queryClient.ensureQueryData(adminMeQueryOptions)
 
   if (!isSuperAdmin) {
     throw redirect({ to: "/" })

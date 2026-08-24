@@ -28,6 +28,7 @@ import {
   type CustomerFieldDefinition,
   type CustomerFieldType,
 } from "@/lib/customer-fields"
+import { invalidateCustomerFieldSettings } from "@/lib/queries"
 
 const FIELD_TYPES: Array<{ value: CustomerFieldType; label: string }> = [
   { value: "text", label: "Text" },
@@ -126,6 +127,7 @@ export function CustomerFieldSettings() {
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.error ?? "Unable to save customer fields")
       setFields(sortCustomerFields(data.fieldDefinitions ?? []))
+      void invalidateCustomerFieldSettings()
       toast.success("Customer fields saved")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to save customer fields")

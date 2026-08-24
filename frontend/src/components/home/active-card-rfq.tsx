@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { queryOptions, useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { FileTextIcon } from "lucide-react"
 
@@ -54,34 +54,34 @@ function RfqRowItem({ rfq }: { rfq: RfqRow }) {
   )
 }
 
-export function RfqActiveCard() {
-  const [rfqs, setRfqs] = useState<RfqRow[] | null>(null)
-  const [stats, setStats] = useState<StatsOverview | null>(null)
-  const [error, setError] = useState<string | null>(null)
+const recentRfqsQueryOptions = queryOptions({
+  queryKey: ["rfq", "recent-widget"],
+  queryFn: async () => {
+    const res = await fetch(`${API_ORIGIN}/api/v1/rfq?limit=5`, { credentials: "include" })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return (await res.json()) as { rfqs: RfqRow[] }
+  },
+  staleTime: 60_000,
+})
 
-  useEffect(() => {
-    let active = true
-    Promise.all([
-      fetch(`${API_ORIGIN}/api/v1/rfq?limit=5`, { credentials: "include" }).then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return (await res.json()) as { rfqs: RfqRow[] }
-      }),
-      fetch(`${API_ORIGIN}/api/v1/stats/overview?range=7d`, { credentials: "include" })
-        .then((res) => (res.ok ? (res.json() as Promise<StatsOverview>) : null))
-        .catch(() => null),
-    ])
-      .then(([list, overview]) => {
-        if (!active) return
-        setRfqs(list.rfqs)
-        setStats(overview)
-      })
-      .catch((err: unknown) => {
-        if (active) setError(err instanceof Error ? err.message : "Failed to load RFQs")
-      })
-    return () => {
-      active = false
-    }
-  }, [])
+const statsOverviewQueryOptions = queryOptions({
+  queryKey: ["stats", "overview", "7d"],
+  queryFn: async () => {
+    const res = await fetch(`${API_ORIGIN}/api/v1/stats/overview?range=7d`, {
+      credentials: "include",
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return (await res.json()) as StatsOverview
+  },
+  staleTime: 60_000,
+})
+
+export function RfqActiveCard() {
+  const { data: list, error: listError } = useQuery(recentRfqsQueryOptions)
+  const { data: stats } = useQuery(statsOverviewQueryOptions)
+
+  const rfqs = list?.rfqs ?? null
+  const error = listError ? listError.message || "Failed to load RFQs" : null
 
   return (
     <DashboardCard

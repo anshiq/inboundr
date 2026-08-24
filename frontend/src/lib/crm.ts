@@ -1,4 +1,6 @@
 import { API_ORIGIN } from "@/lib/env"
+import { gmailAccountsQueryOptions } from "@/lib/queries/gmail"
+import { queryClient } from "@/lib/query-client"
 
 const API_BASE = `${API_ORIGIN}/api/v1/crm`
 
@@ -273,11 +275,7 @@ export function sendLeadEmail(
 
 export async function listGmailAccountOptions(): Promise<GmailAccountOption[]> {
   try {
-    const response = await fetch(`${API_ORIGIN}/api/v1/gmail/accounts`, {
-      credentials: "include",
-    })
-    if (!response.ok) return []
-    const data = await response.json()
+    const data = await queryClient.fetchQuery(gmailAccountsQueryOptions)
     const accounts = Array.isArray(data.accounts) ? data.accounts : []
     return accounts.filter((account: GmailAccountOption) => account.status === "connected")
   } catch {

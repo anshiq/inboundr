@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react"
+import { queryOptions, useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { CheckCircle2Icon, ReceiptTextIcon } from "lucide-react"
 
 import { API_ORIGIN } from "@/lib/env"
 import { formatMoney, formatRelativeTime } from "@/lib/format"
+import { invoiceStatsQueryOptions } from "@/lib/queries"
 
 import {
   DashboardCard,
@@ -53,36 +54,25 @@ function InvoiceRowItem({ invoice }: { invoice: InvoiceRow }) {
   )
 }
 
-export function InvoicesActiveCard() {
-  const [invoices, setInvoices] = useState<InvoiceRow[] | null>(null)
-  const [stats, setStats] = useState<InvoiceStats | null>(null)
-  const [error, setError] = useState<string | null>(null)
+const overdueInvoicesQueryOptions = queryOptions({
+  queryKey: ["invoices", "overdue-widget"],
+  queryFn: async () => {
+    const res = await fetch(`${API_ORIGIN}/api/v1/invoices?status=overdue&limit=5`, {
+      credentials: "include",
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return (await res.json()) as { invoices: InvoiceRow[] }
+  },
+  staleTime: 60_000,
+})
 
-  useEffect(() => {
-    let active = true
-    Promise.all([
-      fetch(`${API_ORIGIN}/api/v1/invoices?status=overdue&limit=5`, { credentials: "include" }).then(
-        async (res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`)
-          return (await res.json()) as { invoices: InvoiceRow[] }
-        }
-      ),
-      fetch(`${API_ORIGIN}/api/v1/invoices/stats`, { credentials: "include" })
-        .then((res) => (res.ok ? (res.json() as Promise<InvoiceStats>) : null))
-        .catch(() => null),
-    ])
-      .then(([list, summary]) => {
-        if (!active) return
-        setInvoices(list.invoices)
-        setStats(summary)
-      })
-      .catch((err: unknown) => {
-        if (active) setError(err instanceof Error ? err.message : "Failed to load invoices")
-      })
-    return () => {
-      active = false
-    }
-  }, [])
+export function InvoicesActiveCard() {
+  const { data: list, error: listError } = useQuery(overdueInvoicesQueryOptions)
+  const { data: statsData } = useQuery(invoiceStatsQueryOptions)
+
+  const invoices = list?.invoices ?? null
+  const stats = (statsData as InvoiceStats | undefined) ?? null
+  const error = listError ? listError.message || "Failed to load invoices" : null
 
   return (
     <DashboardCard

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 
-import { API_ORIGIN } from "@/lib/env"
+import { supportCallSettingsQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 
 export type AssignedPhoneNumber = {
   id: string
@@ -16,11 +17,8 @@ export function useAssignedPhoneNumbers() {
     let cancelled = false
     async function load() {
       try {
-        const res = await fetch(`${API_ORIGIN}/api/v1/support/call/settings`, {
-          credentials: "include",
-        })
-        const data = await res.json().catch(() => null)
-        if (!res.ok || cancelled) return
+        const data = await queryClient.fetchQuery(supportCallSettingsQueryOptions)
+        if (cancelled) return
         const active = (data?.phoneNumbers ?? []).filter(
           (number: AssignedPhoneNumber) => number.status === "active"
         )
