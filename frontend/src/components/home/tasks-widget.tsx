@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { CheckCircle2Icon, ListChecksIcon } from "lucide-react"
 
@@ -57,22 +57,14 @@ function TaskRow({ task }: { task: MyTask }) {
 }
 
 export function TasksWidget() {
-  const [tasks, setTasks] = useState<MyTask[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { data, error: queryError } = useQuery({
+    queryKey: ["projects", "my-tasks-widget"],
+    queryFn: () => getMyTasks(6),
+    staleTime: 60_000,
+  })
 
-  useEffect(() => {
-    let active = true
-    getMyTasks(6)
-      .then((data) => {
-        if (active) setTasks(data.tasks)
-      })
-      .catch((err: unknown) => {
-        if (active) setError(err instanceof Error ? err.message : "Failed to load tasks")
-      })
-    return () => {
-      active = false
-    }
-  }, [])
+  const tasks = data?.tasks ?? null
+  const error = queryError ? queryError.message || "Failed to load tasks" : null
 
   return (
     <DashboardCard title="Tasks Assigned to Me" icon={ListChecksIcon} to="/projects" viewAllLabel="All Projects">

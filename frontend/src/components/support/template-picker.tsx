@@ -4,7 +4,8 @@ import { FileTextIcon, LoaderIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { API_ORIGIN } from "@/lib/env"
+import { supportTemplatesQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 import { resolveTemplate } from "./support-utils"
 import type { SupportTemplate, Ticket } from "./types"
 
@@ -27,10 +28,10 @@ export function TemplatePicker({
     if (!open || loaded) return
     let cancelled = false
     setLoading(true)
-    fetch(`${API_ORIGIN}/api/v1/support/templates`, { credentials: "include" })
-      .then((response) => response.json())
+    queryClient
+      .fetchQuery(supportTemplatesQueryOptions)
       .then((data) => {
-        if (!cancelled) setTemplates(data?.templates ?? [])
+        if (!cancelled) setTemplates((data?.templates ?? []) as SupportTemplate[])
       })
       .catch(() => {
         if (!cancelled) setTemplates([])

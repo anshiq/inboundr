@@ -55,6 +55,8 @@ import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { API_ORIGIN } from "@/lib/env"
+import { adminPlansQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 import { formatDate } from "@/lib/format"
 
 interface Feature {
@@ -220,16 +222,15 @@ export default function AdminOrganizationPage() {
   async function load() {
     setLoading(true)
     try {
-      const [detailResponse, plansResponse, organizationsResponse, phoneNumbersResponse] = await Promise.all([
+      const [detailResponse, planData, organizationsResponse, phoneNumbersResponse] = await Promise.all([
         fetch(`${API_ORIGIN}/api/v1/admin/organizations/${id}`, { credentials: "include" }),
-        fetch(`${API_ORIGIN}/api/v1/admin/plans`, { credentials: "include" }),
+        queryClient.fetchQuery(adminPlansQueryOptions),
         fetch(`${API_ORIGIN}/api/v1/admin/organizations`, { credentials: "include" }),
         fetch(`${API_ORIGIN}/api/v1/admin/phone-numbers?organizationId=${id}`, { credentials: "include" }),
       ])
-      if (!detailResponse.ok || !plansResponse.ok || !organizationsResponse.ok) throw new Error("Failed to load organization")
-      const [detailData, planData, organizationsData] = await Promise.all([
+      if (!detailResponse.ok || !organizationsResponse.ok) throw new Error("Failed to load organization")
+      const [detailData, organizationsData] = await Promise.all([
         detailResponse.json(),
-        plansResponse.json(),
         organizationsResponse.json(),
       ])
       setOrganization(detailData.organization)

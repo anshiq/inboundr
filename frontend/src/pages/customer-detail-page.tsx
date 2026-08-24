@@ -41,11 +41,11 @@ import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import {
   activeCustomerFields,
   customerFieldValue,
-  fetchCustomerSettings,
   formatCustomerFieldValue,
   type CustomerFieldDefinition,
   type CustomerFieldValues,
 } from "@/lib/customer-fields"
+import { getCustomerFieldSettings } from "@/lib/queries"
 import {
   createEmptyCustomerForm,
   customerFormToPayload,
@@ -112,7 +112,7 @@ export default function CustomerDetailPage() {
     try {
       const [response, fields] = await Promise.all([
         fetch(`${API_BASE}/${id}`, { credentials: "include" }),
-        fetchCustomerSettings().catch(() => []),
+        getCustomerFieldSettings().catch(() => []),
       ])
       if (!response.ok) {
         if (response.status === 404) throw new Error("Customer not found")

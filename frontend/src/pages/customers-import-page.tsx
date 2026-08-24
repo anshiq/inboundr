@@ -33,9 +33,9 @@ import { API_ORIGIN } from "@/lib/env"
 import { formatNumber } from "@/lib/format"
 import {
   activeCustomerFields,
-  fetchCustomerSettings,
   type CustomerFieldDefinition,
 } from "@/lib/customer-fields"
+import { getCustomerFieldSettings } from "@/lib/queries"
 const API_BASE = `${API_ORIGIN}/api/v1/customers`
 const UNMAPPED_COLUMN = "__unmapped__"
 
@@ -256,9 +256,10 @@ export default function CustomersImportPage() {
   const [result, setResult] = useState<ImportResult | null>(null)
 
   useEffect(() => {
-    const controller = new AbortController()
-    void fetchCustomerSettings(controller.signal)
+    let cancelled = false
+    void getCustomerFieldSettings()
       .then((fields) => {
+        if (cancelled) return
         setFieldDefinitions(fields)
         if (!parsedFile) {
           const nextFields: ImportField[] = [
@@ -275,7 +276,9 @@ export default function CustomersImportPage() {
         }
       })
       .catch(() => {})
-    return () => controller.abort()
+    return () => {
+      cancelled = true
+    }
   }, [parsedFile])
 
   const validationErrors = useMemo(

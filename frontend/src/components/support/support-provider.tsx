@@ -11,7 +11,12 @@ import {
 
 import { API_ORIGIN, getEmbedOrigin } from "@/lib/env"
 import { getActiveOrganizationId, setActiveOrganizationId } from "@/lib/organization-context"
-import { organizationMeQueryOptions } from "@/lib/queries"
+import {
+  invalidateSupportTags,
+  organizationMeQueryOptions,
+  supportResolutionReasonsQueryOptions,
+  supportTagsQueryOptions,
+} from "@/lib/queries"
 import { queryClient } from "@/lib/query-client"
 import { previewFromMessage, ticketMatchesFilter } from "./support-utils"
 import type {
@@ -737,11 +742,7 @@ function useSupportInboxValue() {
 
   const loadTicketTags = useCallback(async () => {
     try {
-      const response = await fetch(`${API_ORIGIN}/api/v1/support/ticket-tags`, {
-        credentials: "include",
-      })
-      const body = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(body?.error ?? "Failed to load ticket tags")
+      const body = await queryClient.fetchQuery(supportTagsQueryOptions)
       setTicketTags(body?.tags ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load ticket tags")
@@ -754,11 +755,7 @@ function useSupportInboxValue() {
 
   const loadResolutionReasons = useCallback(async () => {
     try {
-      const response = await fetch(`${API_ORIGIN}/api/v1/support/resolution-reasons`, {
-        credentials: "include",
-      })
-      const body = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(body?.error ?? "Failed to load resolution reasons")
+      const body = await queryClient.fetchQuery(supportResolutionReasonsQueryOptions)
       setResolutionReasons(body?.reasons ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load resolution reasons")
@@ -780,6 +777,7 @@ function useSupportInboxValue() {
         })
         const body = await response.json().catch(() => null)
         if (!response.ok) throw new Error(body?.error ?? "Failed to create tag")
+        await invalidateSupportTags()
         await loadTicketTags()
         return true
       } catch (err) {
@@ -801,6 +799,7 @@ function useSupportInboxValue() {
         })
         const body = await response.json().catch(() => null)
         if (!response.ok) throw new Error(body?.error ?? "Failed to update tag")
+        await invalidateSupportTags()
         await loadTicketTags()
         return true
       } catch (err) {
@@ -820,6 +819,7 @@ function useSupportInboxValue() {
         })
         const body = await response.json().catch(() => null)
         if (!response.ok) throw new Error(body?.error ?? "Failed to delete tag")
+        void invalidateSupportTags()
         setTicketTags((current) => current.filter((tag) => tag.id !== tagId))
         setTickets((current) =>
           current.map((ticket) => ({

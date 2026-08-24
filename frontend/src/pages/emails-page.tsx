@@ -47,6 +47,8 @@ import {
 } from "@/lib/email-reply"
 
 import { API_ORIGIN } from "@/lib/env"
+import { gmailAccountsQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 const API_BASE = `${API_ORIGIN}/api/v1/email`
 const SPREADSHEET_PREVIEW_ROW_LIMIT = 200
 const SPREADSHEET_PREVIEW_COLUMN_LIMIT = 30
@@ -862,12 +864,9 @@ export function EmailsPage() {
 
     async function loadSignatures() {
       try {
-        const res = await fetch(`${API_ORIGIN}/api/v1/gmail/accounts`, {
-          credentials: "include",
-        })
-        if (!res.ok) return
-        const data: { accounts?: { emailAddress: string; signatureHtml: string | null }[] } =
-          await res.json()
+        const data = (await queryClient.fetchQuery(gmailAccountsQueryOptions)) as {
+          accounts?: { emailAddress: string; signatureHtml: string | null }[]
+        }
         if (cancelled) return
         setSignaturesByAccount(
           Object.fromEntries(

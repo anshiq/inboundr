@@ -34,6 +34,8 @@ import { formatDate, formatMoney } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 import { API_ORIGIN } from "@/lib/env"
+import { invalidateInvoiceStats, invoiceStatsQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 const INVOICE_API = `${API_ORIGIN}/api/v1/invoices`
 const PAGE_LIMIT = 20
 
@@ -146,8 +148,14 @@ export default function InvoicesPage() {
   }, [debouncedSearch, page, status])
 
   const fetchStats = useCallback(async () => {
-    const response = await fetch(`${INVOICE_API}/stats`, { credentials: "include" })
-    if (response.ok) setStats((await response.json()) as InvoiceStats)
+    try {
+      // Shares its cache entry with the home overdue-invoices widget, so
+      // refreshing here (e.g. after bulk send/cancel) updates both.
+      await invalidateInvoiceStats()
+      setStats((await queryClient.fetchQuery(invoiceStatsQueryOptions)) as InvoiceStats)
+    } catch {
+      // Stat cards keep their skeletons; the list is the primary content.
+    }
   }, [])
 
   useEffect(() => {

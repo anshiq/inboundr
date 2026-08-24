@@ -46,7 +46,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { useEntitlements } from "@/lib/entitlements"
-import { API_ORIGIN } from "@/lib/env"
+import { employeesCatalogQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 import { formatDate, formatDateTime } from "@/lib/format"
 import {
   ASSET_IMAGE_MIME_TYPES,
@@ -161,12 +162,9 @@ export default function AssetDetailPage() {
       .then((data) => setLocations(data.locations))
       .catch(() => undefined)
 
-    void fetch(`${API_ORIGIN}/api/v1/employees?limit=100`, {
-      credentials: "include",
-    })
-      .then(async (response) => {
-        if (!response.ok) return
-        const data = await response.json()
+    void queryClient
+      .fetchQuery(employeesCatalogQueryOptions)
+      .then((data) => {
         setEmployees(
           (data.employees ?? []).map(
             (employee: { _id: string; fullName: string }) => ({
