@@ -24,6 +24,12 @@ export const auth = betterAuth({
   database: mongodbAdapter(db, {
     client: mongoClient,
   }),
+  session: {
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60,
+    },
+  },
   user: {
     additionalFields: {
       lastSignInAt: {
@@ -33,10 +39,7 @@ export const auth = betterAuth({
       },
     },
   },
-  // Public sign-up is disabled for now: only emails with a pending
-  // organization invitation may register. Everyone else joins the waitlist
-  // (/api/v1/public/waitlist). Admin-created accounts are unaffected because
-  // they go through internalAdapter.createUser, not this HTTP endpoint.
+  // Public sign-up is disabled for now
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       if (ctx.path !== "/sign-up/email") return;
