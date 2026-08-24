@@ -1,13 +1,23 @@
 import { redirect } from "@tanstack/react-router"
 
-import { getSession } from "@/lib/auth-client"
 import { clearOrganizationSessionStorage } from "@/lib/auth-storage"
 import { getAdminMe } from "@/lib/admin"
-import { API_ORIGIN } from "@/lib/env"
+import {
+  organizationMeQueryOptions,
+  sessionQueryOptions,
+  type OrganizationMeResponse,
+} from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 import type { EmployeeAccessModule, FeatureKey } from "@/lib/entitlements"
 
 export async function requireSession() {
-  const { data: session } = await getSession()
+  let session = await queryClient.ensureQueryData(sessionQueryOptions)
+
+  if (!session) {
+    // The cache may hold a stale signed-out result from before the user
+    // logged in, so confirm with a fresh request before redirecting.
+    session = await queryClient.fetchQuery({ ...sessionQueryOptions, staleTime: 0 })
+  }
 
   if (!session) {
     throw redirect({ to: "/login" })
@@ -17,7 +27,7 @@ export async function requireSession() {
 }
 
 export async function redirectIfAuthenticated() {
-  const { data: session } = await getSession()
+  const session = await queryClient.fetchQuery({ ...sessionQueryOptions, staleTime: 0 })
 
   if (session) {
     throw redirect({ to: "/" })
@@ -35,40 +45,40 @@ export async function requireSuperAdmin() {
   }
 }
 
-export async function requireFeatureAccess(feature: FeatureKey) {
-  await requireSession()
-  const response = await fetch(`${API_ORIGIN}/api/v1/organization/me`, {
-    credentials: "include",
-  })
-
-  if (!response.ok) {
+async function getOrganizationAccess(): Promise<OrganizationMeResponse> {
+  try {
+    return await queryClient.ensureQueryData(organizationMeQueryOptions)
+  } catch {
     throw redirect({ to: "/" })
   }
+}
 
-  const data = await response.json()
+function assertFeatureAccess(data: OrganizationMeResponse, feature: FeatureKey) {
   if (!data.entitlements?.effectiveFeatures?.includes(feature)) {
     throw redirect({ to: "/" })
   }
 }
 
-export async function requireModuleAccess(module: EmployeeAccessModule) {
-  await requireSession()
-  const response = await fetch(`${API_ORIGIN}/api/v1/organization/me`, {
-    credentials: "include",
-  })
-
-  if (!response.ok) {
-    throw redirect({ to: "/" })
-  }
-
-  const data = await response.json()
+function assertModuleAccess(data: OrganizationMeResponse, module: EmployeeAccessModule) {
   const access = data.employeeAccess
   if (access && (!access.enabled || (access.restricted && !access.allowedModules?.includes(module)))) {
     throw redirect({ to: "/" })
   }
 }
 
+export async function requireFeatureAccess(feature: FeatureKey) {
+  await requireSession()
+  assertFeatureAccess(await getOrganizationAccess(), feature)
+}
+
+export async function requireModuleAccess(module: EmployeeAccessModule) {
+  await requireSession()
+  assertModuleAccess(await getOrganizationAccess(), module)
+}
+
 export async function requireFeatureAndModuleAccess(feature: FeatureKey, module: EmployeeAccessModule) {
-  await requireFeatureAccess(feature)
-  await requireModuleAccess(module)
+  await requireSession()
+  const data = await getOrganizationAccess()
+  assertFeatureAccess(data, feature)
+  assertModuleAccess(data, module)
 }

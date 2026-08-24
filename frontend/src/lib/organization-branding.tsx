@@ -1,7 +1,9 @@
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 
 import { useTheme } from "@/components/theme-provider"
 import { API_ORIGIN } from "@/lib/env"
+import { organizationMeQueryOptions } from "@/lib/queries"
 
 const DEFAULT_PRIMARY_COLOR = "#f5b400"
 const BRANDING_CHANGED_EVENT = "btsa:organization-branding-changed"
@@ -173,51 +175,63 @@ export function OrganizationBrandingProvider({
   const [branding, setBranding] = React.useState<OrganizationBranding | null>(readCachedBranding)
   const [loading, setLoading] = React.useState(true)
 
-  const refreshBranding = React.useCallback(async () => {
-    setLoading(true)
+  const { data, error, isPending, refetch } = useQuery(organizationMeQueryOptions)
 
-    try {
-      const response = await fetch(`${API_ORIGIN}/api/v1/organization/me`, {
-        credentials: "include",
-      })
-      const data = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        throw new Error(data?.error || "Failed to load organization branding")
-      }
-
-      const organization = data?.organization
-      const logoUrl = organization?.logoUrl ?? ""
-
-      const freshBranding: OrganizationBranding = {
-        organizationId: organization?._id ?? "",
-        name: organization?.name ?? "",
-        logoUrl,
-        logoDisplayUrl: await resolveLogoDisplayUrl(logoUrl),
-        primaryColor:
-          normalizeHexColor(organization?.preferences?.primaryColor) ??
-          DEFAULT_PRIMARY_COLOR,
-        theme: organization?.preferences?.theme === "light" ? "light" : "dark",
-        colorTheme: organization?.preferences?.colorTheme ?? "default",
-        isPro: Boolean(organization?.isPro),
-      }
-
-      setBranding(freshBranding)
-      writeCachedBranding(freshBranding)
-    } catch (error) {
-      console.error("Failed to load organization branding", error)
-      setBranding(null)
-      clearCachedBranding()
-      applyPrimaryColor(null)
-      setOrgColorTheme(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [setOrgColorTheme])
-
+  // Derive branding from the shared /organization/me query. Kept in local
+  // state (rather than a plain useMemo) because resolving the logo display
+  // URL is itself async.
   React.useEffect(() => {
-    void refreshBranding()
-  }, [refreshBranding])
+    if (isPending) return
+
+    let cancelled = false
+
+    const applyFreshBranding = async () => {
+      try {
+        if (error || !data) {
+          throw error ?? new Error("Failed to load organization branding")
+        }
+
+        const organization = data.organization
+        const logoUrl = organization?.logoUrl ?? ""
+
+        const freshBranding: OrganizationBranding = {
+          organizationId: organization?._id ?? "",
+          name: organization?.name ?? "",
+          logoUrl,
+          logoDisplayUrl: await resolveLogoDisplayUrl(logoUrl),
+          primaryColor:
+            normalizeHexColor(organization?.preferences?.primaryColor) ??
+            DEFAULT_PRIMARY_COLOR,
+          theme: organization?.preferences?.theme === "light" ? "light" : "dark",
+          colorTheme: organization?.preferences?.colorTheme ?? "default",
+          isPro: Boolean(organization?.isPro),
+        }
+
+        if (cancelled) return
+        setBranding(freshBranding)
+        writeCachedBranding(freshBranding)
+      } catch (logoError) {
+        console.error("Failed to load organization branding", logoError)
+        if (cancelled) return
+        setBranding(null)
+        clearCachedBranding()
+        applyPrimaryColor(null)
+        setOrgColorTheme(null)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    void applyFreshBranding()
+
+    return () => {
+      cancelled = true
+    }
+  }, [data, error, isPending, setOrgColorTheme])
+
+  const refreshBranding = React.useCallback(async () => {
+    await refetch()
+  }, [refetch])
 
   React.useEffect(() => {
     const handleBrandingChanged = () => {

@@ -68,6 +68,8 @@ import {
 import { toast } from "sonner"
 
 import { API_ORIGIN } from "@/lib/env"
+import { invalidateOrganizationMe, organizationMeQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 import { formatDate, formatDateTime } from "@/lib/format"
 
 const createTermTemplateId = (prefix: string) => {
@@ -562,13 +564,8 @@ function OrganizationTab() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`${API_ORIGIN}/api/v1/organization/me`, {
-        credentials: "include",
-      })
-      const data: { organization: Organization } = await res.json()
-      if (!res.ok) throw new Error((data as any)?.error || "Failed to load organization")
-
-      applyOrganization(data.organization)
+      const data = await queryClient.fetchQuery(organizationMeQueryOptions)
+      applyOrganization(data.organization as Organization)
     } catch (err: any) {
       setError(err.message || "Failed to load organization")
     } finally {
@@ -657,6 +654,7 @@ function OrganizationTab() {
         colorTheme: form.preferences.colorTheme,
       }
       toast.success("Organization settings saved")
+      void invalidateOrganizationMe()
       notifyOrganizationBrandingChanged()
     } catch (err: any) {
       const message = err.message || "Failed to save organization"
@@ -4560,8 +4558,8 @@ function PaymentRemindersCard() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    fetch(`${API_ORIGIN}/api/v1/organization/me`, { credentials: "include" })
-      .then((res) => res.json())
+    queryClient
+      .fetchQuery(organizationMeQueryOptions)
       .then((data) => {
         const reminders = data?.organization?.preferences?.paymentReminders
         if (reminders) {
@@ -4600,6 +4598,7 @@ function PaymentRemindersCard() {
       if (saved) {
         setPrefs((prev) => ({ ...prev, ...saved }))
       }
+      void invalidateOrganizationMe()
       toast.success("Payment reminder settings saved")
     } catch (err: any) {
       toast.error(err.message || "Failed to save payment reminder settings")
