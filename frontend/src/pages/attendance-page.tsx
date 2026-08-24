@@ -70,6 +70,8 @@ import {
 } from "@/components/ui/table"
 import { downloadAttendanceWorkbook, type AttendanceExportRow } from "@/lib/attendance-export"
 import { API_ORIGIN, getEmbedOrigin } from "@/lib/env"
+import { organizationMeQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 import { formatTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -222,10 +224,12 @@ export default function AttendancePage() {
   }, [organizationId])
 
   const fetchOrganization = useCallback(async () => {
-    const response = await fetch(`${API_ORIGIN}/api/v1/organization/me`, { credentials: "include" })
-    if (!response.ok) return
-    const body = await response.json()
-    setOrganizationId(body.organization?._id ?? "")
+    try {
+      const body = await queryClient.fetchQuery(organizationMeQueryOptions)
+      setOrganizationId(body.organization?._id ?? "")
+    } catch {
+      // POS URL is optional; the rest of the page works without it.
+    }
   }, [])
 
   const fetchAttendance = useCallback(async () => {

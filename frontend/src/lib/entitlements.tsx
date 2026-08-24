@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useContext, useMemo } from "react"
+import { useQuery } from "@tanstack/react-query"
 
-import { API_ORIGIN } from "@/lib/env"
+import { organizationMeQueryOptions } from "@/lib/queries"
 
 export type FeatureKey =
   | "rfq"
@@ -99,50 +100,42 @@ const EntitlementContext = createContext<EntitlementContextValue>({
 })
 
 export function EntitlementProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<EntitlementState>(DEFAULT_ENTITLEMENTS)
-  const [loading, setLoading] = useState(true)
+  const { data, isPending, refetch } = useQuery(organizationMeQueryOptions)
 
-  const refresh = async () => {
-    try {
-      const response = await fetch(`${API_ORIGIN}/api/v1/organization/me`, {
-        credentials: "include",
-      })
-      if (!response.ok) return
-      const data = await response.json()
-      if (data.entitlements?.effectiveFeatures) {
-        const employeeAccess = data.employeeAccess ?? DEFAULT_ENTITLEMENTS.employeeAccess
-        setState({
-          effectiveFeatures: data.entitlements.effectiveFeatures,
-          planSlug: data.entitlements.planSlug ?? "all_features",
-          employeeAccess: {
-            ...DEFAULT_ENTITLEMENTS.employeeAccess,
-            ...employeeAccess,
-            canManageOrganization: Boolean(employeeAccess.canManageOrganization),
-          },
-        })
-      }
-    } finally {
-      setLoading(false)
+  const state = useMemo<EntitlementState>(() => {
+    const effectiveFeatures = data?.entitlements?.effectiveFeatures
+    if (!effectiveFeatures) {
+      return DEFAULT_ENTITLEMENTS
     }
-  }
 
-  useEffect(() => {
-    void refresh()
-  }, [])
+    const employeeAccess = data.employeeAccess ?? DEFAULT_ENTITLEMENTS.employeeAccess
+    return {
+      effectiveFeatures: effectiveFeatures as FeatureKey[],
+      planSlug: data.entitlements?.planSlug ?? "all_features",
+      employeeAccess: {
+        ...DEFAULT_ENTITLEMENTS.employeeAccess,
+        ...employeeAccess,
+        allowedModules: (employeeAccess.allowedModules ?? []) as EmployeeAccessModule[],
+        canManageOrganization: Boolean(employeeAccess.canManageOrganization),
+      },
+    }
+  }, [data])
 
   const value = useMemo<EntitlementContextValue>(
     () => ({
       ...state,
-      loading,
+      loading: isPending,
       hasFeature: (feature) => state.effectiveFeatures.includes(feature),
       hasModuleAccess: (module) => {
         if (!state.employeeAccess.enabled) return false
         return !state.employeeAccess.restricted || state.employeeAccess.allowedModules.includes(module)
       },
       canManageOrganization: state.employeeAccess.canManageOrganization,
-      refresh,
+      refresh: async () => {
+        await refetch()
+      },
     }),
-    [loading, state]
+    [isPending, refetch, state]
   )
 
   return <EntitlementContext.Provider value={value}>{children}</EntitlementContext.Provider>

@@ -11,6 +11,8 @@ import {
 
 import { API_ORIGIN, getEmbedOrigin } from "@/lib/env"
 import { getActiveOrganizationId, setActiveOrganizationId } from "@/lib/organization-context"
+import { organizationMeQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 import { previewFromMessage, ticketMatchesFilter } from "./support-utils"
 import type {
   ResolutionReason,
@@ -304,10 +306,9 @@ function useSupportInboxValue() {
     let cancelled = false
     async function loadOrganization() {
       try {
-        const response = await fetch(`${API_ORIGIN}/api/v1/organization/me`, { credentials: "include" })
-        const body = await response.json().catch(() => null)
+        const body = await queryClient.fetchQuery(organizationMeQueryOptions)
         const id = body?.organization?._id ? String(body.organization._id) : ""
-        if (!cancelled && response.ok && id) {
+        if (!cancelled && id) {
           setOrganizationId(id)
           setActiveOrganizationId(id)
         }
