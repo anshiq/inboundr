@@ -128,6 +128,26 @@ Enable HTTPS:
 sudo certbot --nginx -d api.yourdomain.com
 ```
 
+Enable HTTP/2 (certbot does not add it). Edit the certbot-generated TLS
+server block in `/etc/nginx/sites-available/inboundr-backend` and add
+`http2` to the 443 listen lines:
+
+```nginx
+listen 443 ssl http2; # managed by Certbot
+listen [::]:443 ssl http2 ipv6only=on; # managed by Certbot
+```
+
+Then validate and reload:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+curl -sI -o /dev/null -w '%{http_version}\n' https://api.yourdomain.com/health
+```
+
+The curl command should print `2`. Without HTTP/2, browsers cap at 6
+concurrent connections to the API, which serializes parallel requests.
+
 Verify:
 
 ```bash
