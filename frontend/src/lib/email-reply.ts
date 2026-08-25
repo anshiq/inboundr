@@ -151,6 +151,16 @@ export function deleteDraft(draftId: string): Promise<{ deleted: boolean }> {
   })
 }
 
+export function generateReply(
+  draftId: string,
+  guidance?: string
+): Promise<{ bodyHtml: string }> {
+  return request<{ bodyHtml: string }>(`${EMAIL_API_BASE}/drafts/${draftId}/generate`, {
+    method: "POST",
+    body: JSON.stringify(guidance ? { guidance } : {}),
+  })
+}
+
 export interface SentMessage extends ThreadMessage {
   /** Set when the message went out but the follow-up archive did not. */
   archiveError: string | null

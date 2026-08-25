@@ -35,6 +35,7 @@ import {
   EMAIL_ATTACHMENT_MAX_FILE_SIZE,
   isBlockedAttachmentFilename,
 } from "../config/upload-constraints.config";
+import { GUIDANCE_MAX_LENGTH, generateReplyDraft } from "../services/email-ai.service";
 import { emitDomainEvent } from "../events/domain-events";
 import { GMAIL_SEND_SCOPE } from "../config/gmail.config";
 
@@ -815,6 +816,46 @@ export const updateEmailDraft = async (req: Request, res: Response): Promise<voi
   } catch (err) {
     console.error("Error updating email draft:", err);
     res.status(500).json({ error: "Failed to update draft" });
+  }
+};
+
+export const generateEmailReply = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const scope = requestScope(req);
+    const draft = await loadDraft(req, scope);
+    if (!draft) {
+      res.status(404).json({ error: "Draft not found" });
+      return;
+    }
+    if (draft.kind === "forward") {
+      res.status(400).json({ error: "AI drafting is only available for replies" });
+      return;
+    }
+
+    // Replies always carry the parent's threadId, so the draft itself is enough
+    // to load the conversation. Drafts are excluded by the messageId filter.
+    const messages = draft.threadId ? await loadThreadMessages(draft, scope) : [];
+    if (messages.length === 0) {
+      res.status(400).json({ error: "There is no message to reply to yet" });
+      return;
+    }
+
+    const guidance = String(req.body?.guidance ?? "")
+      .trim()
+      .slice(0, GUIDANCE_MAX_LENGTH);
+
+    const { bodyHtml } = await generateReplyDraft({
+      messages,
+      subject: draft.subject ?? "",
+      to: draft.to ?? "",
+      accountAddress: draft.from,
+      guidance: guidance || undefined,
+    });
+
+    res.json({ bodyHtml });
+  } catch (err) {
+    console.error("Error generating AI email reply:", err);
+    res.status(500).json({ error: "Failed to generate a reply. Try again." });
   }
 };
 

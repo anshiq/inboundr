@@ -9,6 +9,7 @@ import {
   PaperclipIcon,
   QuoteIcon,
   SendIcon,
+  SparklesIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
@@ -30,6 +31,7 @@ import {
   EMAIL_ATTACHMENT_MAX_TOTAL_SIZE,
   deleteDraft as deleteDraftRequest,
   formatFileSize,
+  generateReply,
   replyKindLabel,
   sendDraft,
   updateDraft,
@@ -65,6 +67,12 @@ function toDraftState(draft: ThreadMessage): DraftState {
     bodyHtml: draft.bodyHtml ?? "",
     pendingAttachments: draft.pendingAttachments ?? [],
   }
+}
+
+function htmlToPlainText(html: string): string {
+  const container = document.createElement("div")
+  container.innerHTML = html
+  return (container.textContent ?? "").trim()
 }
 
 function toDraftInput(state: DraftState): DraftInput {
@@ -146,6 +154,7 @@ export function ReplyComposer({
   const [saving, setSaving] = useState(false)
   const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [sendError, setSendError] = useState<string | null>(draft.sendError ?? null)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -286,6 +295,40 @@ export function ReplyComposer({
     },
     [draft._id, isForward, onSent, overSizeLimit, sending]
   )
+
+  const handleGenerate = useCallback(async () => {
+    if (generating) return
+
+    // Anything the user already typed becomes guidance for the AI rather than
+    // being silently discarded, and the signature block always survives.
+    const body = latestState.current.bodyHtml
+    let userContent = body
+    let signature = ""
+    if (signatureHtml) {
+      const index = body.indexOf(signatureHtml)
+      if (index >= 0) {
+        userContent = body.slice(0, index)
+        signature = body.slice(index)
+      } else {
+        // The editor may have re-serialized the signature markup; fall back to
+        // re-appending the canonical signature after the generated reply.
+        signature = signatureHtml
+      }
+    }
+
+    setGenerating(true)
+    try {
+      const guidance = htmlToPlainText(userContent)
+      const { bodyHtml } = await generateReply(draft._id, guidance || undefined)
+      patch({ bodyHtml: `${bodyHtml}${signature}` })
+      // Defer until after the editor re-enables so focus lands in the new text.
+      requestAnimationFrame(() => editorApi.current?.focus())
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate a reply")
+    } finally {
+      setGenerating(false)
+    }
+  }, [draft._id, generating, patch, signatureHtml])
 
   const handleDiscard = useCallback(async () => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -500,7 +543,7 @@ export function ReplyComposer({
             <RichTextEditor
               value={state.bodyHtml}
               onChange={(html) => patch({ bodyHtml: html })}
-              disabled={sending}
+              disabled={sending || generating}
               autoFocus={!isForward}
               onSubmitShortcut={() => void handleSend()}
               toolbarPosition="bottom"
@@ -557,6 +600,34 @@ export function ReplyComposer({
               disabled={sending}
               onSelect={(emoji) => editorApi.current?.insertText(emoji)}
             />
+
+            {!isForward && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground/60 hover:text-foreground"
+                    disabled={sending || generating}
+                    onClick={() => void handleGenerate()}
+                    aria-label="Write with AI"
+                  >
+                    {generating ? (
+                      <LoaderIcon className="size-3.5 animate-spin" />
+                    ) : (
+                      <SparklesIcon className="size-3.5" />
+                    )}
+                    {generating ? "Writing..." : "Write with AI"}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {generating
+                    ? "Generating a draft reply"
+                    : "Generate a draft reply from this conversation"}
+                </TooltipContent>
+              </Tooltip>
+            )}
 
             <Tooltip>
               <TooltipTrigger asChild>
