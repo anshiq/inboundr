@@ -103,10 +103,14 @@ const emailSchema = new Schema<IEmail>(
     inReplyTo: { type: String, default: null },
     replyTo: { type: String, default: null },
     from: { type: String, required: true },
-    to: { type: String, required: requiredForInbound, default: "" },
+    // Not required: real mail can be BCC-only (no To header) or have an empty
+    // subject, and Mongoose `required` rejects "" on strings — marking these
+    // required made such messages fail ingestion forever, jamming the Gmail
+    // history cursor.
+    to: { type: String, default: "" },
     cc: { type: String, default: null },
     bcc: { type: String, default: null },
-    subject: { type: String, required: requiredForInbound, default: "" },
+    subject: { type: String, default: "" },
     date: { type: Date, required: true },
     bodyText: { type: String, default: null },
     bodyHtml: { type: String, default: null },

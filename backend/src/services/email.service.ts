@@ -73,69 +73,187 @@ async function recordSkippedMessage(
   }
 }
 
+// A message that fails ingestion this many times is treated as permanently
+// broken and skipped. Without a cap, a single poison message pins the sync
+// cursor and every Gmail notification replays the whole range since it.
+const MAX_INGEST_ATTEMPTS = 5;
+
+async function recordFailedIngestAttempt(
+  account: IGmailAccount,
+  messageId: string
+): Promise<void> {
+  try {
+    const doc = await SkippedGmailMessage.findOneAndUpdate(
+      { gmailAccountId: account._id, messageId },
+      { $setOnInsert: { reason: "failed" }, $inc: { attempts: 1 } },
+      { upsert: true, returnDocument: "after" }
+    ).lean();
+
+    if (doc && doc.attempts >= MAX_INGEST_ATTEMPTS) {
+      console.error(
+        `Giving up on Gmail message ${messageId} for ${account.emailAddress} after ${doc.attempts} failed ingestion attempts; skipping it so the sync cursor can advance`
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `Failed to record ingestion failure for Gmail message ${messageId}:`,
+      err
+    );
+  }
+}
+
 export async function ingestInboxMessage(
   account: IGmailAccount,
   messageId: string
 ): Promise<boolean> {
-  const [exists, alreadySkipped] = await Promise.all([
+  const [exists, skipRecord] = await Promise.all([
     Email.exists({ gmailAccountId: account._id, messageId }).lean(),
-    SkippedGmailMessage.exists({
+    SkippedGmailMessage.findOne({
       gmailAccountId: account._id,
       messageId,
-    }).lean(),
+    })
+      .select("reason attempts")
+      .lean(),
   ]);
-  if (exists || alreadySkipped) return false;
-
-  let parsed: ParsedEmail;
-  try {
-    parsed = await getEmailById(account, messageId);
-  } catch (err: any) {
-    // Gmail's history log can reference messages that were deleted (spam
-    // purge, delete filter, another client) before we fetched them. A 404 is
-    // permanent, so treat it as "nothing to ingest" rather than a retryable
-    // failure — otherwise the sync cursor gets stuck replaying it forever.
-    if (err?.status === 404 || err?.code === 404) {
-      console.log(`Gmail message ${messageId} no longer exists, skipping`);
-      await recordSkippedMessage(account, messageId, "not_found");
-      return false;
-    }
-    throw err;
-  }
-  if (isSelfSentEmail(account, parsed)) {
-    console.log(
-      `Skipping self-sent Gmail message ${messageId} from ${parsed.from}`
-    );
-    await recordSkippedMessage(account, messageId, "self_sent");
+  if (exists) return false;
+  if (
+    skipRecord &&
+    (skipRecord.reason !== "failed" ||
+      (skipRecord.attempts ?? 0) >= MAX_INGEST_ATTEMPTS)
+  ) {
     return false;
   }
 
-  const saved = await saveEmail(account, parsed);
-  if (!saved) return false;
-  console.log(`Saved email: ${parsed.subject} from ${parsed.from}`);
+  try {
+    let parsed: ParsedEmail;
+    try {
+      parsed = await getEmailById(account, messageId);
+    } catch (err: any) {
+      // Gmail's history log can reference messages that were deleted (spam
+      // purge, delete filter, another client) before we fetched them. A 404 is
+      // permanent, so treat it as "nothing to ingest" rather than a retryable
+      // failure — otherwise the sync cursor gets stuck replaying it forever.
+      if (err?.status === 404 || err?.code === 404) {
+        console.log(`Gmail message ${messageId} no longer exists, skipping`);
+        await recordSkippedMessage(account, messageId, "not_found");
+        return false;
+      }
+      throw err;
+    }
+    if (isSelfSentEmail(account, parsed)) {
+      console.log(
+        `Skipping self-sent Gmail message ${messageId} from ${parsed.from}`
+      );
+      await recordSkippedMessage(account, messageId, "self_sent");
+      return false;
+    }
 
-  const emailDoc = await Email.findOne({
-    gmailAccountId: account._id,
-    messageId,
-  }).lean();
-  if (emailDoc && hasRFQProcessableContent(emailDoc)) {
-    const body = await buildRFQProcessingInput(account, emailDoc);
-    processEmailForRFQ(
-      emailDoc._id.toString(),
-      body,
+    const saved = await saveEmail(account, parsed);
+    if (!saved) return false;
+    console.log(`Saved email: ${parsed.subject} from ${parsed.from}`);
+
+    if (skipRecord) {
+      // The message recovered on a retry; drop the failure marker so it does
+      // not linger until the TTL expiry.
+      SkippedGmailMessage.deleteOne({
+        gmailAccountId: account._id,
+        messageId,
+      }).catch(() => {});
+    }
+
+    const emailDoc = await Email.findOne({
+      gmailAccountId: account._id,
       messageId,
-      account.userId,
-      account._id.toString(),
-      account.organizationId?.toString(),
-      { threadId: emailDoc.threadId ?? null }
-    ).catch((err) =>
-      console.error(`RFQ processing failed for ${messageId}:`, err)
-    );
-  }
+    }).lean();
+    if (emailDoc && hasRFQProcessableContent(emailDoc)) {
+      const body = await buildRFQProcessingInput(account, emailDoc);
+      processEmailForRFQ(
+        emailDoc._id.toString(),
+        body,
+        messageId,
+        account.userId,
+        account._id.toString(),
+        account.organizationId?.toString(),
+        { threadId: emailDoc.threadId ?? null }
+      ).catch((err) =>
+        console.error(`RFQ processing failed for ${messageId}:`, err)
+      );
+    }
 
-  return true;
+    return true;
+  } catch (err) {
+    await recordFailedIngestAttempt(account, messageId);
+    throw err;
+  }
 }
 
+interface InFlightHistoryUpdate {
+  promise: Promise<void>;
+  pendingHistoryId: string | null;
+}
+
+const inFlightHistoryUpdates = new Map<string, InFlightHistoryUpdate>();
+
+export function isHistoryUpdateInFlight(accountId: {
+  toString(): string;
+}): boolean {
+  return inFlightHistoryUpdates.has(accountId.toString());
+}
+
+/**
+ * Serializes history processing per account. Gmail sends one Pub/Sub
+ * notification per mailbox change and each run already covers everything from
+ * the stored cursor up to "now", so overlapping runs just replay the same
+ * range in parallel and multiply the load. Concurrent calls coalesce: the
+ * newest historyId is remembered and the active run makes one follow-up pass.
+ */
 export async function processHistoryUpdate(
+  account: IGmailAccount,
+  newHistoryId: string
+): Promise<void> {
+  const key = account._id.toString();
+
+  const existing = inFlightHistoryUpdates.get(key);
+  if (existing) {
+    if (
+      !existing.pendingHistoryId ||
+      BigInt(newHistoryId) > BigInt(existing.pendingHistoryId)
+    ) {
+      existing.pendingHistoryId = newHistoryId;
+    }
+    return existing.promise;
+  }
+
+  const entry: InFlightHistoryUpdate = {
+    pendingHistoryId: null,
+    promise: Promise.resolve(),
+  };
+
+  entry.promise = (async () => {
+    try {
+      let currentAccount: IGmailAccount | null = account;
+      let historyId: string | null = newHistoryId;
+
+      while (currentAccount && historyId) {
+        await runHistoryUpdate(currentAccount, historyId);
+
+        historyId = entry.pendingHistoryId;
+        entry.pendingHistoryId = null;
+        if (historyId) {
+          // The stored cursor advanced during the pass; reload it.
+          currentAccount = await GmailAccount.findById(account._id);
+        }
+      }
+    } finally {
+      inFlightHistoryUpdates.delete(key);
+    }
+  })();
+
+  inFlightHistoryUpdates.set(key, entry);
+  return entry.promise;
+}
+
+async function runHistoryUpdate(
   account: IGmailAccount,
   newHistoryId: string
 ): Promise<void> {

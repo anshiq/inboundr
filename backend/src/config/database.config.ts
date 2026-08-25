@@ -20,7 +20,12 @@ export async function connectDB(): Promise<void> {
     console.log("MongoDB disconnected");
   });
 
-  await mongoose.connect(uri);
+  await mongoose.connect(uri, {
+    // Cap the pool so background bursts (Gmail sync, RFQ jobs) queue instead
+    // of exhausting Atlas connection limits shared with the auth client.
+    maxPoolSize: 20,
+    serverSelectionTimeoutMS: 10000,
+  });
   await reconcileEmailIndexes();
 }
 
