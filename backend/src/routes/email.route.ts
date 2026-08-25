@@ -4,6 +4,7 @@ import {
   deleteEmailDraft,
   downloadEmailPdf,
   emailWebhookController,
+  generateEmailReply,
   getEmail,
   getEmailAttachment,
   getEmailThread,
@@ -37,6 +38,7 @@ router.post("/:id/drafts", ...requireInbox, createEmailDraft);
 router.patch("/drafts/:draftId", ...requireInbox, updateEmailDraft);
 router.delete("/drafts/:draftId", ...requireInbox, deleteEmailDraft);
 router.post("/drafts/:draftId/send", ...requireInbox, sendEmailDraft);
+router.post("/drafts/:draftId/generate", ...requireInbox, generateEmailReply);
 
 router.get("/:id", ...requireInbox, getEmail);
 
