@@ -78,6 +78,27 @@ async function recordSkippedMessage(
 // cursor and every Gmail notification replays the whole range since it.
 const MAX_INGEST_ATTEMPTS = 5;
 
+// RFQ processing runs an LLM call plus Postgres product searches per email.
+// A backlog catch-up can ingest dozens of emails in seconds; firing all their
+// RFQ jobs at once exhausts the session-mode Postgres pooler (pool_size 20),
+// so queue them behind a small semaphore instead.
+const MAX_CONCURRENT_RFQ_JOBS = 2;
+let activeRfqJobs = 0;
+const rfqJobWaiters: Array<() => void> = [];
+
+async function withRfqSlot<T>(fn: () => Promise<T>): Promise<T> {
+  while (activeRfqJobs >= MAX_CONCURRENT_RFQ_JOBS) {
+    await new Promise<void>((resolve) => rfqJobWaiters.push(resolve));
+  }
+  activeRfqJobs++;
+  try {
+    return await fn();
+  } finally {
+    activeRfqJobs--;
+    rfqJobWaiters.shift()?.();
+  }
+}
+
 async function recordFailedIngestAttempt(
   account: IGmailAccount,
   messageId: string
@@ -167,14 +188,16 @@ export async function ingestInboxMessage(
     }).lean();
     if (emailDoc && hasRFQProcessableContent(emailDoc)) {
       const body = await buildRFQProcessingInput(account, emailDoc);
-      processEmailForRFQ(
-        emailDoc._id.toString(),
-        body,
-        messageId,
-        account.userId,
-        account._id.toString(),
-        account.organizationId?.toString(),
-        { threadId: emailDoc.threadId ?? null }
+      withRfqSlot(() =>
+        processEmailForRFQ(
+          emailDoc._id.toString(),
+          body,
+          messageId,
+          account.userId,
+          account._id.toString(),
+          account.organizationId?.toString(),
+          { threadId: emailDoc.threadId ?? null }
+        )
       ).catch((err) =>
         console.error(`RFQ processing failed for ${messageId}:`, err)
       );

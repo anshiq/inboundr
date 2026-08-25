@@ -61,7 +61,9 @@ const dbConfig: DatabaseConfig = {
   password: process.env.DB_PASSWORD!,
 };
 
-const pool = new Pool(dbConfig);
+// Bounded: several module-level pools plus per-job searcher pools share a
+// session-mode pooler capped at 20 clients.
+const pool = new Pool({ ...dbConfig, max: 4 });
 
 function parseLimit(value: unknown): number {
   const parsed = parseInt(String(value ?? ""), 10);

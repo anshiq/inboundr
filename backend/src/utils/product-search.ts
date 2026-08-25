@@ -310,7 +310,10 @@ export class TextProductSearcher {
   private profile: ProductSearchProfile;
 
   constructor(dbConfig: DatabaseConfig, profile: ProductSearchProfile = {}) {
-    this.pool = new Pool(dbConfig);
+    // Searcher instances are short-lived and created per job; the pg default
+    // of 10 connections each exhausts session-mode poolers (pool_size 20)
+    // whenever a few jobs overlap.
+    this.pool = new Pool({ ...dbConfig, max: 3 });
     this.profile = profile;
   }
 
