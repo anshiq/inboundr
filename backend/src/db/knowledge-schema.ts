@@ -12,7 +12,9 @@ let pool: Pool | null = null;
  */
 export function getKnowledgePool(): Pool {
   if (!pool) {
-    pool = new Pool(getDatabaseConfigFromEnv());
+    // Bounded: several module-level pools plus per-job searcher pools share a
+    // session-mode pooler capped at 20 clients.
+    pool = new Pool({ ...getDatabaseConfigFromEnv(), max: 4 });
   }
   return pool;
 }
