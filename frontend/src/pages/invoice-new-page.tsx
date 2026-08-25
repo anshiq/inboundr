@@ -28,6 +28,8 @@ import {
 import { cn } from "@/lib/utils"
 
 import { API_ORIGIN } from "@/lib/env"
+import { organizationMeQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 const INVOICE_API = `${API_ORIGIN}/api/v1/invoices`
 const CUSTOMER_API = `${API_ORIGIN}/api/v1/customers`
 const PRODUCT_API = `${API_ORIGIN}/api/v1/products`
@@ -192,8 +194,8 @@ export default function InvoiceNewPage() {
 
   useEffect(() => {
     let cancelled = false
-    void fetch(`${API_ORIGIN}/api/v1/organization/me`, { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : null))
+    void queryClient
+      .fetchQuery(organizationMeQueryOptions)
       .then((data) => {
         if (cancelled) return
         setOrgDefaultUpiId(data?.organization?.preferences?.defaultUpiId ?? "")

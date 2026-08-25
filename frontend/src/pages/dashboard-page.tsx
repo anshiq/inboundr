@@ -85,6 +85,8 @@ import type { CatalogAdjustment } from "@/lib/catalog"
 import { getAvatarColor } from "@/lib/utils"
 
 import { API_ORIGIN } from "@/lib/env"
+import { organizationMeQueryOptions } from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 const API_BASE = `${API_ORIGIN}/api/v1/rfq`
 const EMAIL_API_BASE = `${API_ORIGIN}/api/v1/email`
 const PRODUCTS_API_BASE = `${API_ORIGIN}/api/v1/products`
@@ -919,11 +921,7 @@ export function DashboardPage() {
 
   const fetchPaymentTermTemplates = useCallback(async () => {
     try {
-      const res = await fetch(`${API_ORIGIN}/api/v1/organization/me`, {
-        credentials: "include",
-      })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`)
+      const data = await queryClient.fetchQuery(organizationMeQueryOptions)
       const preferences = data?.organization?.preferences
       setPaymentTermTemplates(
         normalizePaymentTermTemplates(preferences?.paymentTerms, preferences?.defaultTerms ?? ""),

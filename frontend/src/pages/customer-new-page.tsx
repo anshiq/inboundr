@@ -30,10 +30,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import {
   activeCustomerFields,
-  fetchCustomerSettings,
   type CustomerFieldDefinition,
   type CustomerFieldValue,
 } from "@/lib/customer-fields"
+import { getCustomerFieldSettings } from "@/lib/queries"
 import {
   createEmptyCustomerForm,
   customerFormToPayload,
@@ -120,7 +120,7 @@ export default function CustomerNewPage() {
     setLoadingFields(true)
     setFieldsError(null)
     try {
-      setFieldDefinitions(await fetchCustomerSettings())
+      setFieldDefinitions(await getCustomerFieldSettings())
     } catch (error) {
       setFieldsError(error instanceof Error ? error.message : "Unable to load customer fields")
     } finally {
@@ -130,7 +130,7 @@ export default function CustomerNewPage() {
 
   useEffect(() => {
     let cancelled = false
-    void fetchCustomerSettings()
+    void getCustomerFieldSettings()
       .then((fields) => {
         if (!cancelled) setFieldDefinitions(fields)
       })

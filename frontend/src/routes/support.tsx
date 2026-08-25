@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, type SearchSchemaInput } from "@tanstack/react-router"
 
 import { SupportLayout } from "@/components/support/support-layout"
 import type { TicketFilter } from "@/components/support/types"
@@ -39,8 +39,10 @@ function parseTags(value: unknown): string[] {
 
 export const Route = createFileRoute("/support")({
   // Validated on the layout so list filters survive navigating between the
-  // list and a conversation.
-  validateSearch: (search: Record<string, unknown>): SupportListSearch => {
+  // list and a conversation. SearchSchemaInput keeps `search` optional at
+  // navigation time (every field has a default below) while the parsed
+  // output stays fully required for consumers.
+  validateSearch: (search: Record<string, unknown> & SearchSchemaInput): SupportListSearch => {
     const status = String(search.status ?? "open") as TicketFilter
     const sort = String(search.sort ?? "recent") as SupportListSort
     const page = Number(search.page)

@@ -9,8 +9,8 @@ import type {
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { createSuggestionPopup, type SuggestionPopup } from "@/components/editor/suggestion-popup"
-import { API_ORIGIN } from "@/lib/env"
-import { getActiveOrganizationId } from "@/lib/organization-context"
+import { organizationMembersQueryOptions } from "@/lib/queries/organization-members"
+import { queryClient } from "@/lib/query-client"
 import { cn, getAvatarColor } from "@/lib/utils"
 
 export interface MentionMember {
@@ -20,21 +20,12 @@ export interface MentionMember {
   image: string | null
 }
 
-// One fetch per organization per session: the member list is small and
-// stable, and the picker must respond instantly once the user types "@".
-// Keyed by the active organization so switching orgs without a full reload
-// never offers members of the previous organization.
-let membersCache: {
-  organizationId: string | null
-  promise: Promise<MentionMember[]>
-} | null = null
-
-async function fetchMentionMembers(): Promise<MentionMember[]> {
-  const response = await fetch(`${API_ORIGIN}/api/v1/organization/members`, {
-    credentials: "include",
-  })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  const data = await response.json()
+// The shared members query keeps the picker instant once the user types "@":
+// react-query dedupes concurrent loads and serves the cached list. Org
+// switches invalidate the whole cache (see installQueryCacheListeners), so
+// the picker never offers members of the previous organization.
+async function loadMentionMembers(): Promise<MentionMember[]> {
+  const data = await queryClient.ensureQueryData(organizationMembersQueryOptions)
   const members = Array.isArray(data.members) ? data.members : []
   return members
     .filter((member: Record<string, unknown>) => typeof member.userId === "string" && member.userId)
@@ -44,19 +35,6 @@ async function fetchMentionMembers(): Promise<MentionMember[]> {
       email: member.userEmail ? String(member.userEmail) : null,
       image: member.userImage ? String(member.userImage) : null,
     }))
-}
-
-function loadMentionMembers(): Promise<MentionMember[]> {
-  const organizationId = getActiveOrganizationId()
-  if (!membersCache || membersCache.organizationId !== organizationId) {
-    const promise = fetchMentionMembers().catch((err) => {
-      // Drop only our own failed entry; a newer org's fetch must survive.
-      if (membersCache?.promise === promise) membersCache = null
-      throw err
-    })
-    membersCache = { organizationId, promise }
-  }
-  return membersCache.promise
 }
 
 interface MentionListRef {

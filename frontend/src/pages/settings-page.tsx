@@ -68,6 +68,23 @@ import {
 import { toast } from "sonner"
 
 import { API_ORIGIN } from "@/lib/env"
+import {
+  gmailAccountsQueryOptions,
+  invalidateGmailAccounts,
+  invalidateOrganizationMe,
+  invalidateOrganizationMembers,
+  invalidateSupportCallSettings,
+  invalidateSupportResolutionReasons,
+  invalidateSupportTags,
+  invalidateSupportTemplates,
+  organizationMeQueryOptions,
+  organizationMembersQueryOptions,
+  supportCallSettingsQueryOptions,
+  supportResolutionReasonsQueryOptions,
+  supportTagsQueryOptions,
+  supportTemplatesQueryOptions,
+} from "@/lib/queries"
+import { queryClient } from "@/lib/query-client"
 import { formatDate, formatDateTime } from "@/lib/format"
 
 const createTermTemplateId = (prefix: string) => {
@@ -562,13 +579,8 @@ function OrganizationTab() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`${API_ORIGIN}/api/v1/organization/me`, {
-        credentials: "include",
-      })
-      const data: { organization: Organization } = await res.json()
-      if (!res.ok) throw new Error((data as any)?.error || "Failed to load organization")
-
-      applyOrganization(data.organization)
+      const data = await queryClient.fetchQuery(organizationMeQueryOptions)
+      applyOrganization(data.organization as Organization)
     } catch (err: any) {
       setError(err.message || "Failed to load organization")
     } finally {
@@ -657,6 +669,7 @@ function OrganizationTab() {
         colorTheme: form.preferences.colorTheme,
       }
       toast.success("Organization settings saved")
+      void invalidateOrganizationMe()
       notifyOrganizationBrandingChanged()
     } catch (err: any) {
       const message = err.message || "Failed to save organization"
@@ -1486,12 +1499,11 @@ function AccountTab() {
     setLoadingAccounts(true)
     setGmailError(null)
     try {
-      const res = await fetch(`${API_ORIGIN}/api/v1/gmail/accounts`, {
-        credentials: "include",
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data: { accounts: GmailAccount[] } = await res.json()
-      setAccounts(data.accounts)
+      // Settings must show the result of connect/disconnect immediately, so
+      // refresh the shared accounts query rather than trusting the cache.
+      await invalidateGmailAccounts()
+      const data = await queryClient.fetchQuery(gmailAccountsQueryOptions)
+      setAccounts((data.accounts ?? []) as GmailAccount[])
     } catch (err: any) {
       setGmailError(err.message || "Failed to load Gmail accounts")
     } finally {
@@ -1826,6 +1838,8 @@ function GmailSignatureEditor({
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`)
 
+      // The emails page reads signatures from the shared accounts query.
+      void invalidateGmailAccounts()
       onSaved(data.account as GmailAccount)
       toast.success("Signature saved")
       setOpen(false)
@@ -1915,10 +1929,12 @@ function MembersTab() {
     setLoading(true)
     setError(null)
     try {
-      const [membersRes, invitationsRes, groupsRes] = await Promise.all([
-        fetch(`${API_ORIGIN}/api/v1/organization/members`, {
-          credentials: "include",
-        }),
+      // The admin view must reflect mutations done in this tab, so refresh
+      // the shared members query (which the @-mention picker also reads)
+      // instead of serving a possibly stale cache entry.
+      await invalidateOrganizationMembers()
+      const [membersData, invitationsRes, groupsRes] = await Promise.all([
+        queryClient.fetchQuery(organizationMembersQueryOptions),
         fetch(`${API_ORIGIN}/api/v1/organization/invitations`, {
           credentials: "include",
         }),
@@ -1927,9 +1943,7 @@ function MembersTab() {
         }),
       ])
 
-      const membersData = await membersRes.json()
-      if (!membersRes.ok) throw new Error(membersData?.error || "Failed to load members")
-      setMembers(membersData.members ?? [])
+      setMembers((membersData.members ?? []) as OrganizationMember[])
 
       if (invitationsRes.ok) {
         const invitationsData = await invitationsRes.json()
@@ -2769,9 +2783,10 @@ function SupportTicketTagsCard() {
   const fetchTags = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_ORIGIN}/api/v1/support/ticket-tags`, { credentials: "include" })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(data?.error || "Failed to load ticket tags")
+      // Always fresh in settings; also keeps the support inbox's shared
+      // tags query in sync after mutations in this tab.
+      await invalidateSupportTags()
+      const data = await queryClient.fetchQuery(supportTagsQueryOptions)
       setTags(data.tags ?? [])
     } catch (err: any) {
       toast.error(err.message || "Failed to load ticket tags")
@@ -2983,11 +2998,8 @@ function SupportResolutionReasonsCard() {
   const fetchReasons = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_ORIGIN}/api/v1/support/resolution-reasons`, {
-        credentials: "include",
-      })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(data?.error || "Failed to load resolution reasons")
+      await invalidateSupportResolutionReasons()
+      const data = await queryClient.fetchQuery(supportResolutionReasonsQueryOptions)
       setReasons(data.reasons ?? [])
     } catch (err: any) {
       toast.error(err.message || "Failed to load resolution reasons")
@@ -3020,6 +3032,7 @@ function SupportResolutionReasonsCard() {
     const data = await res.json().catch(() => null)
     if (!res.ok) throw new Error(data?.error || "Failed to save resolution reasons")
     setReasons(data.reasons ?? [])
+    void invalidateSupportResolutionReasons()
     return true
   }
 
@@ -3287,11 +3300,8 @@ function SupportTab() {
   const fetchCallSettings = useCallback(async () => {
     setCallSettingsLoading(true)
     try {
-      const res = await fetch(`${API_ORIGIN}/api/v1/support/call/settings`, {
-        credentials: "include",
-      })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(data?.error || "Failed to load voice agent settings")
+      await invalidateSupportCallSettings()
+      const data = await queryClient.fetchQuery(supportCallSettingsQueryOptions)
       if (data.settings) setCallSettings(data.settings)
       setCallPhoneNumbers(data.phoneNumbers ?? [])
     } catch (err: any) {
@@ -3319,6 +3329,7 @@ function SupportTab() {
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.error || "Failed to save voice agent settings")
       setCallSettings((current) => ({ ...current, ...data.settings }))
+      void invalidateSupportCallSettings()
       toast.success("Voice agent settings saved")
     } catch (err: any) {
       toast.error(err.message || "Failed to save voice agent settings")
@@ -3345,9 +3356,8 @@ function SupportTab() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`${API_ORIGIN}/api/v1/support/templates`, { credentials: "include" })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(data?.error || "Failed to load templates")
+      await invalidateSupportTemplates()
+      const data = await queryClient.fetchQuery(supportTemplatesQueryOptions)
       setTemplates(data.templates ?? [])
     } catch (err: any) {
       setError(err.message || "Failed to load templates")
@@ -4560,8 +4570,8 @@ function PaymentRemindersCard() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    fetch(`${API_ORIGIN}/api/v1/organization/me`, { credentials: "include" })
-      .then((res) => res.json())
+    queryClient
+      .fetchQuery(organizationMeQueryOptions)
       .then((data) => {
         const reminders = data?.organization?.preferences?.paymentReminders
         if (reminders) {
@@ -4600,6 +4610,7 @@ function PaymentRemindersCard() {
       if (saved) {
         setPrefs((prev) => ({ ...prev, ...saved }))
       }
+      void invalidateOrganizationMe()
       toast.success("Payment reminder settings saved")
     } catch (err: any) {
       toast.error(err.message || "Failed to save payment reminder settings")
