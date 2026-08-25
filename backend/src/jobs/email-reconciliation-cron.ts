@@ -2,6 +2,7 @@ import { GmailAccount } from "../models/gmail-account.model";
 import {
   backfillInboxMessages,
   canProcessQuotationInbox,
+  isHistoryUpdateInFlight,
 } from "../services/email.service";
 
 /**
@@ -20,6 +21,9 @@ export function startEmailReconciliationCron(): void {
 
       for (const account of accounts) {
         try {
+          // A push-triggered history run is already syncing this mailbox;
+          // sweeping it now would double the work for no extra coverage.
+          if (isHistoryUpdateInFlight(account._id)) continue;
           if (!(await canProcessQuotationInbox(account))) continue;
 
           const result = await backfillInboxMessages(account, RECONCILE_WINDOW);

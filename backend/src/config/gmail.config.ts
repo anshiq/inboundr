@@ -58,7 +58,9 @@ export async function getGmailClientForAccount(
     }
   });
 
-  return google.gmail({ version: "v1", auth: oauth });
+  // Without a timeout a hung Gmail call pins its history-sync run
+  // indefinitely, blocking that account's cursor from ever advancing.
+  return google.gmail({ version: "v1", auth: oauth, timeout: 30000 });
 }
 
 export async function exchangeGmailCode(code: string): Promise<{

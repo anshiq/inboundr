@@ -16,7 +16,12 @@ if (!mongoUri) {
   throw new Error("MONGODB_URI environment variable is not set");
 }
 
-const mongoClient = new MongoClient(mongoUri);
+const mongoClient = new MongoClient(mongoUri, {
+  // Session lookups are small and frequent; a bounded pool keeps this client
+  // from competing with the main Mongoose pool for Atlas connection limits.
+  maxPoolSize: 10,
+  serverSelectionTimeoutMS: 10000,
+});
 const databaseName = new URL(mongoUri).pathname.replace("/", "") || undefined;
 const db = mongoClient.db(databaseName);
 
