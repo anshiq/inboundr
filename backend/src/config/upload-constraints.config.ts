@@ -7,6 +7,16 @@ export const BRANDING_ALLOWED_MIME_TYPES = [
 
 export const BRANDING_MAX_FILE_SIZE = 2 * 1024 * 1024;
 
+// Shared by the visitor presign (support-chat.controller) and the agent
+// presign (uploads.controller) so both sides accept the same video types.
+export const SUPPORT_VIDEO_MIME_TYPES = [
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+] as const;
+
+export const SUPPORT_VIDEO_MAX_FILE_SIZE = 50 * 1024 * 1024;
+
 export const EMAIL_ATTACHMENT_ALLOWED_MIME_TYPES = [
   // Documents
   "application/pdf",

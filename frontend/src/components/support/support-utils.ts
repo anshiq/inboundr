@@ -91,6 +91,10 @@ export function isImageAttachment(attachment: TicketAttachment) {
   return attachment.contentType.startsWith("image/")
 }
 
+export function isVideoAttachment(attachment: TicketAttachment) {
+  return attachment.contentType.startsWith("video/")
+}
+
 /** Mirrors the backend list preview so live socket updates match the server. */
 export function previewFromMessage(message: Pick<TicketMessage, "bodyText" | "attachments">) {
   const body = (message.bodyText ?? "").replace(/\s+/g, " ").trim()

@@ -20,7 +20,7 @@ import type { ComposerMode, PendingAttachment, Ticket } from "./types"
 const MAX_FILES = 5
 
 const ACCEPTED_FILE_TYPES =
-  "application/pdf,image/jpeg,image/png,image/webp,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+  "application/pdf,image/jpeg,image/png,image/webp,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,video/mp4,video/webm,video/quicktime"
 
 export function Composer({
   ticket,
