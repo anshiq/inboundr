@@ -892,10 +892,12 @@ function AddRFQDialog({
   const [text, setText] = useState("")
   const [files, setFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFilesSelected = (list: FileList | null) => {
     if (!list) return
+    setSubmitError(null)
     setFiles((prev) => {
       const next = [...prev]
       for (const file of Array.from(list)) {
@@ -921,6 +923,7 @@ function AddRFQDialog({
     }
 
     setSubmitting(true)
+    setSubmitError(null)
     try {
       const attachments: RFQManualAttachment[] = []
       for (const file of files) {
@@ -941,7 +944,9 @@ function AddRFQDialog({
       setFiles([])
       onCreated(data as RFQSummary)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add RFQ")
+      // Shown inline (not only as a toast) because rejections carry an
+      // explanation the user needs to read, e.g. "This doesn't look like an RFQ".
+      setSubmitError(err instanceof Error ? err.message : "Failed to add RFQ")
     } finally {
       setSubmitting(false)
     }
@@ -961,7 +966,10 @@ function AddRFQDialog({
           <textarea
             rows={7}
             value={text}
-            onChange={(event) => setText(event.target.value)}
+            onChange={(event) => {
+              setText(event.target.value)
+              setSubmitError(null)
+            }}
             placeholder="Paste the customer's request here — products, quantities, contact details..."
             className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             disabled={submitting}
@@ -1018,6 +1026,12 @@ function AddRFQDialog({
               </div>
             )}
           </div>
+          {submitError && (
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5">
+              <AlertCircleIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+              <p className="text-xs text-destructive">{submitError}</p>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
@@ -1029,7 +1043,7 @@ function AddRFQDialog({
             className="gap-2"
           >
             {submitting ? <Spinner data-icon="inline-start" /> : <SparklesIcon className="size-4" />}
-            Add &amp; Process
+            {submitting ? "Checking..." : "Add & Process"}
           </Button>
         </DialogFooter>
       </DialogContent>

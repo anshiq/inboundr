@@ -150,16 +150,22 @@ export async function backfillRFQThreadIds(): Promise<void> {
 
 /**
  * Extraction for a manually created RFQ (pasted text and/or uploaded files).
- * Classification is skipped: the user explicitly submitted it as an RFQ.
- * Runs in the background after the RFQ doc is created; on retry the same doc
- * is reprocessed from its stored manualInput.
+ * Classification already happened synchronously at creation time, so only
+ * extraction runs here. Runs in the background after the RFQ doc is created;
+ * on retry the same doc is reprocessed from its stored manualInput.
+ *
+ * `prebuiltInput` lets the create endpoint reuse the extraction it already ran
+ * for classification instead of downloading and parsing the files again.
  */
-export async function processManualRFQ(rfqId: string): Promise<void> {
+export async function processManualRFQ(
+  rfqId: string,
+  prebuiltInput?: string
+): Promise<void> {
   const rfq = await RFQ.findById(rfqId).lean();
   if (!rfq || rfq.source !== "manual" || !rfq.manualInput) return;
 
   try {
-    const input = await buildManualRFQProcessingInput(rfq.manualInput);
+    const input = prebuiltInput ?? (await buildManualRFQProcessingInput(rfq.manualInput));
     if (!input.trim()) {
       throw new Error("No processable text could be extracted from the submission");
     }
