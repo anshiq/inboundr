@@ -1,7 +1,10 @@
 import { RFQ } from "../models/rfq.model";
 import { Email } from "../models/email.model";
 import { updateEmailStatus } from "./email.service";
-import { buildRFQThreadConversationInput } from "./rfq-input.service";
+import {
+  buildManualRFQProcessingInput,
+  buildRFQThreadConversationInput,
+} from "./rfq-input.service";
 import { classifyEmail } from "../agents/check_rfq";
 import { generateRFQ } from "../agents/generate_rfq";
 import { Organization } from "../models/organization.model";
@@ -112,6 +115,7 @@ async function updateRFQFromThreadReply(params: {
 export async function backfillRFQThreadIds(): Promise<void> {
   const missing = await RFQ.find({
     $or: [{ threadId: null }, { threadId: { $exists: false } }],
+    emailId: { $ne: null },
   })
     .select("emailId")
     .lean();
@@ -125,6 +129,7 @@ export async function backfillRFQThreadIds(): Promise<void> {
   );
 
   const operations = missing.flatMap((rfq) => {
+    if (!rfq.emailId) return [];
     const threadId = threadIdByEmailId.get(rfq.emailId.toString());
     if (!threadId) return [];
     return [
@@ -140,6 +145,68 @@ export async function backfillRFQThreadIds(): Promise<void> {
   if (operations.length > 0) {
     await RFQ.bulkWrite(operations);
     console.log(`Backfilled threadId on ${operations.length} RFQs`);
+  }
+}
+
+/**
+ * Extraction for a manually created RFQ (pasted text and/or uploaded files).
+ * Classification is skipped: the user explicitly submitted it as an RFQ.
+ * Runs in the background after the RFQ doc is created; on retry the same doc
+ * is reprocessed from its stored manualInput.
+ */
+export async function processManualRFQ(rfqId: string): Promise<void> {
+  const rfq = await RFQ.findById(rfqId).lean();
+  if (!rfq || rfq.source !== "manual" || !rfq.manualInput) return;
+
+  try {
+    const input = await buildManualRFQProcessingInput(rfq.manualInput);
+    if (!input.trim()) {
+      throw new Error("No processable text could be extracted from the submission");
+    }
+
+    const organizationId = rfq.organizationId?.toString();
+    const organizationContext = await getOrganizationContext(organizationId);
+    const { customer, queryProducts, searchResults } = await generateRFQ(
+      organizationContext,
+      input,
+      organizationId
+    );
+
+    await RFQ.updateOne(
+      { _id: rfq._id },
+      {
+        $set: {
+          customer,
+          queryProducts,
+          searchResults,
+          isProcessed: true,
+          errorMessage: null,
+        },
+      }
+    );
+
+    console.log(
+      `Manual RFQ ${rfqId} processed: ${queryProducts.length} products found`
+    );
+
+    if (organizationId) {
+      void emitDomainEvent("rfq.identified", {
+        rfqId,
+        organizationId,
+        userId: rfq.userId,
+      });
+    }
+  } catch (err: any) {
+    console.error(`Manual RFQ processing failed for ${rfqId}:`, err);
+    await RFQ.updateOne(
+      { _id: rfqId },
+      {
+        $set: {
+          isProcessed: true,
+          errorMessage: err.message || "Unknown error",
+        },
+      }
+    );
   }
 }
 

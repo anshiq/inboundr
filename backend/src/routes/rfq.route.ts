@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { archiveRFQ, listRFQs, getRFQ, retryRFQ, generateQuote, getQuoteReply, sendQuoteReply, downloadRFQPdf, listDraftRFQs, saveRFQDraft, setRFQQuoteNumber } from "../controllers/rfq.controller";
+import { archiveRFQ, listRFQs, getRFQ, retryRFQ, generateQuote, getQuoteReply, sendQuoteReply, downloadRFQPdf, listDraftRFQs, saveRFQDraft, setRFQQuoteNumber, createManualRFQ } from "../controllers/rfq.controller";
 import { requireAuth, requireEmployeeModule, requireFeature, requireOrganization } from "../middleware/auth.middleware";
 
 const router = Router();
@@ -9,6 +9,7 @@ router.use(requireOrganization);
 router.use(requireFeature("rfq"));
 router.use(requireEmployeeModule("rfq"));
 router.get("/", listRFQs);
+router.post("/manual", requireFeature("rfq"), createManualRFQ);
 router.get("/drafts", listDraftRFQs);
 router.get("/:id/pdf", downloadRFQPdf);
 router.get("/:id", getRFQ);

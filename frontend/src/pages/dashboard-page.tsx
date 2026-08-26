@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import * as XLSX from "xlsx"
 
@@ -219,9 +219,23 @@ interface RFQSavedQuoteProduct {
   regretReason?: string | null
 }
 
+interface RFQManualAttachment {
+  key: string
+  filename: string
+  mimeType: string
+  size: number
+}
+
+interface RFQManualInput {
+  text: string | null
+  attachments: RFQManualAttachment[]
+}
+
 interface RFQSummary {
   _id: string
-  emailId: RFQEmail
+  emailId: RFQEmail | null
+  source?: "email" | "manual"
+  manualInput?: RFQManualInput | null
   isRFQ: boolean
   reason: string
   isProcessed: boolean
@@ -370,6 +384,67 @@ function parseSender(from: string): { name: string; email: string } {
   const match = from.match(/^"?(.+?)"?\s*<(.+)>$/)
   if (match) return { name: match[1].trim(), email: match[2] }
   return { name: from, email: from }
+}
+
+function manualRFQTitle(rfq: Pick<RFQSummary, "manualInput">): string {
+  const firstLine = rfq.manualInput?.text?.trim().split("\n")[0]?.trim()
+  if (firstLine) return firstLine.length > 90 ? `${firstLine.slice(0, 90)}…` : firstLine
+  return rfq.manualInput?.attachments?.[0]?.filename || "Manually Added RFQ"
+}
+
+const RFQ_UPLOAD_MAX_FILE_SIZE = 8 * 1024 * 1024
+const RFQ_UPLOAD_MAX_FILES = 4
+const RFQ_UPLOAD_ACCEPT =
+  ".pdf,.csv,.xls,.xlsx,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png,image/webp"
+
+async function uploadManualRFQFile(file: File): Promise<RFQManualAttachment> {
+  const presignRes = await fetch(`${API_ORIGIN}/api/v1/uploads/presign`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      scope: "rfq",
+      fileName: file.name,
+      contentType: file.type || "application/octet-stream",
+      size: file.size,
+    }),
+  })
+  const presign = await presignRes.json().catch(() => null)
+  if (!presignRes.ok) {
+    throw new Error(presign?.error || `Failed to prepare upload for ${file.name}`)
+  }
+
+  const uploadRes = await fetch(presign.uploadUrl, {
+    method: "PUT",
+    headers: presign.headers,
+    body: file,
+  })
+  if (!uploadRes.ok) throw new Error(`Failed to upload ${file.name}`)
+
+  return {
+    key: presign.file.key,
+    filename: file.name,
+    mimeType: file.type || "application/octet-stream",
+    size: file.size,
+  }
+}
+
+async function downloadManualRFQAttachment(attachment: RFQManualAttachment) {
+  try {
+    const params = new URLSearchParams({
+      key: attachment.key,
+      filename: attachment.filename,
+      download: "1",
+    })
+    const res = await fetch(`${API_ORIGIN}/api/v1/uploads/view?${params.toString()}`, {
+      credentials: "include",
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data?.url) throw new Error(data?.error || "Failed to get download link")
+    window.open(data.url, "_blank", "noopener")
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Failed to download file")
+  }
 }
 
 const SPREADSHEET_MIME_TYPES = new Set([
@@ -805,6 +880,163 @@ function DetailPlaceholder() {
   )
 }
 
+function AddRFQDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCreated: (rfq: RFQSummary) => void
+}) {
+  const [text, setText] = useState("")
+  const [files, setFiles] = useState<File[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFilesSelected = (list: FileList | null) => {
+    if (!list) return
+    setFiles((prev) => {
+      const next = [...prev]
+      for (const file of Array.from(list)) {
+        if (next.length >= RFQ_UPLOAD_MAX_FILES) {
+          toast.error(`You can attach up to ${RFQ_UPLOAD_MAX_FILES} files`)
+          break
+        }
+        if (file.size > RFQ_UPLOAD_MAX_FILE_SIZE) {
+          toast.error(`${file.name} must be 8MB or smaller`)
+          continue
+        }
+        next.push(file)
+      }
+      return next
+    })
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  const handleSubmit = async () => {
+    if (!text.trim() && files.length === 0) {
+      toast.error("Paste the RFQ text or attach at least one file")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const attachments: RFQManualAttachment[] = []
+      for (const file of files) {
+        attachments.push(await uploadManualRFQFile(file))
+      }
+
+      const res = await fetch(`${API_BASE}/manual`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.trim(), attachments }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`)
+
+      toast.success("RFQ added — analyzing it now")
+      setText("")
+      setFiles([])
+      onCreated(data as RFQSummary)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add RFQ")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add RFQ</DialogTitle>
+          <DialogDescription>
+            Paste an RFQ received on WhatsApp, phone, or another channel — or upload the
+            file — and it will be processed like an email RFQ.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <textarea
+            rows={7}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder="Paste the customer's request here — products, quantities, contact details..."
+            className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={submitting}
+          />
+          <div className="space-y-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={RFQ_UPLOAD_ACCEPT}
+              className="hidden"
+              onChange={(event) => handleFilesSelected(event.target.files)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={submitting || files.length >= RFQ_UPLOAD_MAX_FILES}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <PaperclipIcon className="size-3.5" />
+              Attach Files
+            </Button>
+            <p className="text-[11px] text-muted-foreground">
+              PDF, Excel/CSV, or image files up to 8MB each (max {RFQ_UPLOAD_MAX_FILES}).
+            </p>
+            {files.length > 0 && (
+              <div className="space-y-1.5">
+                {files.map((file, index) => (
+                  <div
+                    key={`${file.name}-${index}`}
+                    className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-2.5 py-1.5"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <PaperclipIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate text-xs font-medium">{file.name}</span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {(file.size / 1024).toFixed(0)}KB
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 shrink-0 text-muted-foreground"
+                      disabled={submitting}
+                      onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
+                    >
+                      <XIcon className="size-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting || (!text.trim() && files.length === 0)}
+            className="gap-2"
+          >
+            {submitting ? <Spinner data-icon="inline-start" /> : <SparklesIcon className="size-4" />}
+            Add &amp; Process
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const { rfq: selectedRfqId } = useSearch({ from: "/rfq" })
@@ -876,6 +1108,7 @@ export function DashboardPage() {
   const [quoteNotes, setQuoteNotes] = useState<string>("")
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false)
   const [archivingRfq, setArchivingRfq] = useState(false)
+  const [addRfqOpen, setAddRfqOpen] = useState(false)
   const [sourceEmailOpen, setSourceEmailOpen] = useState(false)
   const [selectedSourceAttachment, setSelectedSourceAttachment] = useState<RFQEmailAttachment | null>(null)
 
@@ -1225,7 +1458,11 @@ export function DashboardPage() {
       setTimeout(async () => {
         const list = await fetchList(page)
         if (selectedId === id) {
-          const refreshed = list?.rfqs.find((rfq) => rfq.emailId._id === detail?.emailId._id)
+          // Email retries recreate the RFQ under a new id (found via the source
+          // email); manual retries reuse the same document.
+          const refreshed = list?.rfqs.find((rfq) =>
+            detail?.emailId ? rfq.emailId?._id === detail.emailId._id : rfq._id === id
+          )
           if (refreshed) {
             selectRFQ(refreshed._id)
             await fetchDetail(refreshed._id)
@@ -1791,12 +2028,14 @@ export function DashboardPage() {
         throw new Error(err.error || `HTTP ${res.status}`)
       }
       const data: RFQSummary = await res.json()
+      // The save endpoint populates only summary email fields, so keep the
+      // fuller email loaded in the detail view (null for manual RFQs).
       const nextDetail: RFQSummary = {
         ...data,
-        emailId: {
-          ...detail.emailId,
-          ...data.emailId,
-        },
+        emailId:
+          data.emailId && detail.emailId
+            ? { ...detail.emailId, ...data.emailId }
+            : data.emailId ?? detail.emailId,
       }
       setDetail(nextDetail)
       setRfqs((current) => current.map((rfq) => (rfq._id === data._id ? nextDetail : rfq)))
@@ -1871,6 +2110,8 @@ export function DashboardPage() {
     Object.keys(regrettedLines).length > 0
   const hasPaymentTerms = paymentTermsText.trim().length > 0
   const hasDeliveryTerms = deliveryTermsText.trim().length > 0
+  // Manual RFQs (pasted text / uploaded files) have no source email.
+  const detailEmail = detail?.emailId ?? null
 
   const renderManualProductEditor = (product: ManualProduct) => {
     const effectivePrice = product.price.trim() !== "" ? Number(product.price) : null
@@ -2401,6 +2642,14 @@ export function DashboardPage() {
                 )}
               </div>
               <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  className="h-8 gap-1.5 px-2 text-xs"
+                  onClick={() => setAddRfqOpen(true)}
+                >
+                  <PlusIcon className="size-4" />
+                  Add RFQ
+                </Button>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -2534,8 +2783,8 @@ export function DashboardPage() {
                 <div className="animate-in fade-in-0 duration-300 space-y-0.5 p-1">
                   {rfqs.map((rfq) => {
                     const email = rfq.emailId
-                    const sender = parseSender(email.from)
-                    const senderName = rfq.customer?.company || sender.name
+                    const sender = email ? parseSender(email.from) : null
+                    const senderName = rfq.customer?.company || sender?.name || "Manual Entry"
                     const avatarColors = getAvatarColor(senderName)
                     const initial = senderName.charAt(0).toUpperCase()
                     const isSelected = selectedId === rfq._id
@@ -2558,10 +2807,12 @@ export function DashboardPage() {
                               <ContactHoverCard contact={{ name: rfq.customer.name, email: rfq.customer.email, company: rfq.customer.company, phone: rfq.customer.contactNumber ?? undefined, address: rfq.customer.address ?? undefined }}>
                                 <span className="truncate text-sm font-semibold cursor-default">{senderName}</span>
                               </ContactHoverCard>
-                            ) : (
+                            ) : sender ? (
                               <SenderHoverCard name={sender.name} email={sender.email}>
                                 <span className="truncate text-sm font-semibold cursor-default">{senderName}</span>
                               </SenderHoverCard>
+                            ) : (
+                              <span className="truncate text-sm font-semibold">{senderName}</span>
                             )}
                           </div>
                           <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
@@ -2570,7 +2821,7 @@ export function DashboardPage() {
                         </div>
                         <div className="pl-[42px]">
                           <p className="truncate text-sm font-medium leading-snug">
-                            {email.subject || "(no subject)"}
+                            {email ? email.subject || "(no subject)" : manualRFQTitle(rfq)}
                           </p>
                           <div className="mt-1.5 flex items-center gap-2">
                             <Tooltip>
@@ -2652,7 +2903,7 @@ export function DashboardPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <h1 className="text-lg font-semibold leading-snug">
-                        {detail.emailId.subject || "(no subject)"}
+                        {detailEmail ? detailEmail.subject || "(no subject)" : manualRFQTitle(detail)}
                       </h1>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {formatFullDateTime(detail.createdAt)}
@@ -2680,21 +2931,23 @@ export function DashboardPage() {
                             <PaperclipIcon className="size-4" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>View source attachments</TooltipContent>
+                        <TooltipContent>{detailEmail ? "View source attachments" : "View source submission"}</TooltipContent>
                       </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 shrink-0"
-                            onClick={() => openOriginalEmail(detail.emailId._id)}
-                          >
-                            <ExternalLinkIcon className="size-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Open original email in Inbox</TooltipContent>
-                      </Tooltip>
+                      {detailEmail && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 shrink-0"
+                              onClick={() => openOriginalEmail(detailEmail._id)}
+                            >
+                              <ExternalLinkIcon className="size-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Open original email in Inbox</TooltipContent>
+                        </Tooltip>
+                      )}
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -3347,28 +3600,46 @@ export function DashboardPage() {
                       </p>
                     )}
                     <div className="mt-3 flex items-center gap-3">
-                      <Button
-                        onClick={handleSendQuote}
-                        disabled={
-                          sendingQuote ||
-                          reply.sendStatus === "sent" ||
-                          (!hasPaymentTerms && !reply.paymentTerms?.trim()) ||
-                          (!hasDeliveryTerms && !reply.deliveryTerms?.trim())
-                        }
-                        className="gap-2"
-                      >
-                        {sendingQuote || reply.sendStatus === "sending" ? (
-                          <Spinner data-icon="inline-start" />
-                        ) : (
-                          <SendIcon className="size-4" />
-                        )}
-                        {reply.sendStatus === "sent"
-                          ? "Quote Sent"
-                          : "Send Quote"}
-                      </Button>
-                      <p className="text-xs text-muted-foreground">
-                        Sends from the connected Gmail account on the original thread with a quote PDF attached.
-                      </p>
+                      {detailEmail ? (
+                        <>
+                          <Button
+                            onClick={handleSendQuote}
+                            disabled={
+                              sendingQuote ||
+                              reply.sendStatus === "sent" ||
+                              (!hasPaymentTerms && !reply.paymentTerms?.trim()) ||
+                              (!hasDeliveryTerms && !reply.deliveryTerms?.trim())
+                            }
+                            className="gap-2"
+                          >
+                            {sendingQuote || reply.sendStatus === "sending" ? (
+                              <Spinner data-icon="inline-start" />
+                            ) : (
+                              <SendIcon className="size-4" />
+                            )}
+                            {reply.sendStatus === "sent"
+                              ? "Quote Sent"
+                              : "Send Quote"}
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            Sends from the connected Gmail account on the original thread with a quote PDF attached.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            variant="outline"
+                            className="gap-2"
+                            onClick={() => openDownload(`${API_BASE}/${detail._id}/pdf`)}
+                          >
+                            <DownloadIcon className="size-4" />
+                            Download Quote PDF
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            This RFQ was added manually, so there is no email thread to reply on. Share the PDF instead.
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -3462,35 +3733,107 @@ export function DashboardPage() {
           {detail && (
             <>
               <SheetHeader className="border-b border-border/50 px-5 py-4 pr-12">
-                <SheetTitle>Source Email</SheetTitle>
+                <SheetTitle>{detailEmail ? "Source Email" : "Source Submission"}</SheetTitle>
                 <SheetDescription>
-                  Review the original RFQ email context and attachments without leaving this quote.
+                  {detailEmail
+                    ? "Review the original RFQ email context and attachments without leaving this quote."
+                    : "Review the pasted text and uploaded files this RFQ was created from."}
                 </SheetDescription>
               </SheetHeader>
               <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                {!detailEmail ? (
+                  <div className="space-y-4">
+                    {detail.manualInput?.text && (
+                      <div className="rounded-xl border border-border/50 p-4">
+                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                          Pasted Text
+                        </p>
+                        <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap font-sans text-[13px] leading-relaxed text-muted-foreground">
+                          {detail.manualInput.text}
+                        </pre>
+                      </div>
+                    )}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold">Uploaded Files</p>
+                          <p className="text-xs text-muted-foreground">
+                            Files submitted when this RFQ was added.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                          {detail.manualInput?.attachments?.length ?? 0}
+                        </span>
+                      </div>
+                      {detail.manualInput?.attachments?.length ? (
+                        <div className="space-y-2">
+                          {detail.manualInput.attachments.map((attachment) => (
+                            <div
+                              key={attachment.key}
+                              className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-background px-3 py-2.5"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <PaperclipIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                                  <span className="truncate text-[13px] font-medium">
+                                    {attachment.filename}
+                                  </span>
+                                </div>
+                                <p className="mt-1 pl-5 text-[11px] text-muted-foreground">
+                                  {attachment.mimeType || "Unknown type"} · {(attachment.size / 1024).toFixed(0)}KB
+                                </p>
+                              </div>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-7 shrink-0"
+                                    onClick={() => void downloadManualRFQAttachment(attachment)}
+                                  >
+                                    <DownloadIcon className="size-3.5" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Download</TooltipContent>
+                              </Tooltip>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-border/70 p-6 text-center">
+                          <PaperclipIcon className="mx-auto mb-3 size-8 text-muted-foreground/40" />
+                          <p className="text-[13px] font-medium">No files were uploaded</p>
+                          <p className="mt-1 text-[12px] text-muted-foreground">
+                            This RFQ was created from pasted text only.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
                 <div className="space-y-4">
                   <div className="rounded-xl border border-border/50 bg-muted/20 p-4">
                     <div className="mb-3 flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold">
-                          {detail.emailId.subject || "(no subject)"}
+                          {detailEmail.subject || "(no subject)"}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {formatFullDateTime(detail.emailId.date)}
+                          {formatFullDateTime(detailEmail.date)}
                         </p>
                       </div>
                       <Button
                         variant="outline"
                         size="sm"
                         className="shrink-0 gap-1.5"
-                        onClick={() => openOriginalEmail(detail.emailId._id)}
+                        onClick={() => openOriginalEmail(detailEmail._id)}
                       >
                         <ExternalLinkIcon className="size-3.5" />
                         Open in Inbox
                       </Button>
                     </div>
                     {(() => {
-                      const sender = parseSender(detail.emailId.from)
+                      const sender = parseSender(detailEmail.from)
                       const colors = getAvatarColor(sender.name)
                       return (
                         <div className="flex items-center gap-3">
@@ -3506,13 +3849,13 @@ export function DashboardPage() {
                     })()}
                   </div>
 
-                  {(detail.emailId.snippet || detail.emailId.bodyText) && (
+                  {(detailEmail.snippet || detailEmail.bodyText) && (
                     <div className="rounded-xl border border-border/50 p-4">
                       <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                         Body Snippet
                       </p>
                       <p className="line-clamp-5 whitespace-pre-wrap text-[13px] leading-relaxed text-muted-foreground">
-                        {detail.emailId.snippet || detail.emailId.bodyText}
+                        {detailEmail.snippet || detailEmail.bodyText}
                       </p>
                     </div>
                   )}
@@ -3526,13 +3869,13 @@ export function DashboardPage() {
                         </p>
                       </div>
                       <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                        {detail.emailId.attachments?.length ?? 0}
+                        {detailEmail.attachments?.length ?? 0}
                       </span>
                     </div>
 
-                    {detail.emailId.attachments?.length ? (
+                    {detailEmail.attachments?.length ? (
                       <div className="space-y-2">
-                        {detail.emailId.attachments.map((attachment) => {
+                        {detailEmail.attachments.map((attachment) => {
                           const previewable = isPreviewableAttachment(attachment)
                           return (
                             <div
@@ -3546,7 +3889,7 @@ export function DashboardPage() {
                                   if (previewable) {
                                     setSelectedSourceAttachment(attachment)
                                   } else {
-                                    openDownload(buildSourceAttachmentUrl(detail.emailId._id, attachment.attachmentId, true))
+                                    openDownload(buildSourceAttachmentUrl(detailEmail._id, attachment.attachmentId, true))
                                   }
                                 }}
                               >
@@ -3587,7 +3930,7 @@ export function DashboardPage() {
                                       variant="ghost"
                                       size="icon"
                                       className="size-7"
-                                      onClick={() => openDownload(buildSourceAttachmentUrl(detail.emailId._id, attachment.attachmentId, true))}
+                                      onClick={() => openDownload(buildSourceAttachmentUrl(detailEmail._id, attachment.attachmentId, true))}
                                     >
                                       <DownloadIcon className="size-3.5" />
                                     </Button>
@@ -3610,13 +3953,14 @@ export function DashboardPage() {
                     )}
                   </div>
                 </div>
+                )}
               </div>
             </>
           )}
         </SheetContent>
       </Sheet>
 
-      {detail && selectedSourceAttachment && (
+      {detail && detailEmail && selectedSourceAttachment && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in-0 duration-200">
           <div className="flex h-full max-h-[860px] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between gap-4 border-b border-border/50 px-5 py-3">
@@ -3628,7 +3972,7 @@ export function DashboardPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" asChild>
-                  <a href={buildSourceAttachmentUrl(detail.emailId._id, selectedSourceAttachment.attachmentId, true)}>
+                  <a href={buildSourceAttachmentUrl(detailEmail._id, selectedSourceAttachment.attachmentId, true)}>
                     <DownloadIcon className="mr-1.5 size-3.5" />
                     Download
                   </a>
@@ -3648,18 +3992,18 @@ export function DashboardPage() {
                 <iframe
                   title={selectedSourceAttachment.filename}
                   className="size-full border-0 bg-white"
-                  src={buildSourceAttachmentUrl(detail.emailId._id, selectedSourceAttachment.attachmentId)}
+                  src={buildSourceAttachmentUrl(detailEmail._id, selectedSourceAttachment.attachmentId)}
                 />
               ) : selectedSourceAttachment.mimeType.toLowerCase().startsWith("image/") && isPreviewableAttachment(selectedSourceAttachment) ? (
                 <div className="size-full overflow-auto p-6 text-center">
                   <img
-                    src={buildSourceAttachmentUrl(detail.emailId._id, selectedSourceAttachment.attachmentId)}
+                    src={buildSourceAttachmentUrl(detailEmail._id, selectedSourceAttachment.attachmentId)}
                     alt={selectedSourceAttachment.filename}
                     className="mx-auto max-h-full max-w-full rounded-lg object-contain shadow-lg"
                   />
                 </div>
               ) : isSpreadsheetAttachment(selectedSourceAttachment) ? (
-                <SourceSpreadsheetAttachmentPreview emailId={detail.emailId._id} attachment={selectedSourceAttachment} />
+                <SourceSpreadsheetAttachmentPreview emailId={detailEmail._id} attachment={selectedSourceAttachment} />
               ) : (
                 <div className="flex flex-col items-center gap-4 p-10 text-center">
                   <div className="surface-raised rounded-2xl p-5">
@@ -3672,7 +4016,7 @@ export function DashboardPage() {
                     </p>
                   </div>
                   <Button asChild>
-                    <a href={buildSourceAttachmentUrl(detail.emailId._id, selectedSourceAttachment.attachmentId, true)}>
+                    <a href={buildSourceAttachmentUrl(detailEmail._id, selectedSourceAttachment.attachmentId, true)}>
                       <DownloadIcon className="mr-2 size-4" />
                       Download Attachment
                     </a>
@@ -3683,6 +4027,16 @@ export function DashboardPage() {
           </div>
         </div>
       )}
+
+      <AddRFQDialog
+        open={addRfqOpen}
+        onOpenChange={setAddRfqOpen}
+        onCreated={(rfq) => {
+          setAddRfqOpen(false)
+          void fetchList(1)
+          selectRFQ(rfq._id)
+        }}
+      />
 
       <Dialog open={archiveConfirmOpen} onOpenChange={setArchiveConfirmOpen}>
         <DialogContent showCloseButton={false}>

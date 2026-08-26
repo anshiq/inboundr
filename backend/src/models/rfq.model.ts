@@ -81,11 +81,25 @@ export interface IRFQSavedQuoteProduct {
   regretReason: string | null;
 }
 
+export interface IRFQManualAttachment {
+  key: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface IRFQManualInput {
+  text: string | null;
+  attachments: IRFQManualAttachment[];
+}
+
 export interface IRFQ extends Document {
   userId: string;
   organizationId: Types.ObjectId;
-  gmailAccountId: Types.ObjectId;
-  emailId: Types.ObjectId;
+  source: "email" | "manual";
+  gmailAccountId: Types.ObjectId | null;
+  emailId: Types.ObjectId | null;
+  manualInput: IRFQManualInput | null;
   threadId: string | null;
   latestEmailId: Types.ObjectId | null;
   isRFQ: boolean;
@@ -217,17 +231,45 @@ const rfqSchema = new Schema<IRFQ>(
       required: false,
       index: true,
     },
+    // "email" RFQs come from a linked Gmail account; "manual" RFQs are created
+    // from pasted text or uploaded files and have no source email or account.
+    source: {
+      type: String,
+      enum: ["email", "manual"],
+      default: "email",
+    },
     gmailAccountId: {
       type: Schema.Types.ObjectId,
       ref: "GmailAccount",
-      required: true,
+      required: false,
+      default: null,
       index: true,
     },
     emailId: {
       type: Schema.Types.ObjectId,
       ref: "Email",
-      required: true,
-      unique: true,
+      required: false,
+      default: null,
+    },
+    // Original submission of a manual RFQ, kept so processing can be re-run
+    // and the source can be shown in the UI.
+    manualInput: {
+      type: {
+        text: { type: String, default: null },
+        attachments: {
+          type: [
+            {
+              key: { type: String, required: true },
+              filename: { type: String, required: true },
+              mimeType: { type: String, required: true },
+              size: { type: Number, required: true },
+            },
+          ],
+          default: [],
+          _id: false,
+        },
+      },
+      default: null,
     },
     // Gmail conversation id of the source email, so replies on the same
     // thread can find and update this RFQ instead of spawning a new one.
@@ -287,6 +329,12 @@ const rfqSchema = new Schema<IRFQ>(
   { timestamps: true }
 );
 
+// Partial instead of a plain unique index: manual RFQs carry no emailId, and a
+// non-partial unique index would treat every missing emailId as the same value.
+rfqSchema.index(
+  { emailId: 1 },
+  { unique: true, partialFilterExpression: { emailId: { $type: "objectId" } } }
+);
 rfqSchema.index({ gmailAccountId: 1, threadId: 1 });
 rfqSchema.index({ userId: 1, isRFQ: 1, createdAt: -1 });
 rfqSchema.index({ organizationId: 1, isRFQ: 1, createdAt: -1 });

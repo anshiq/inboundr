@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { Email } from "../models/email.model";
+import { RFQ } from "../models/rfq.model";
 
 export async function connectDB(): Promise<void> {
   const uri = process.env.MONGODB_URI;
@@ -27,6 +28,7 @@ export async function connectDB(): Promise<void> {
     serverSelectionTimeoutMS: 10000,
   });
   await reconcileEmailIndexes();
+  await reconcileRFQIndexes();
 }
 
 /**
@@ -79,6 +81,44 @@ async function reconcileEmailIndexes(): Promise<void> {
     await Email.createIndexes();
   } catch (err) {
     console.error("Failed to reconcile email indexes:", err);
+  }
+}
+
+/**
+ * Manual RFQs carry no emailId, and the original non-partial unique index on
+ * emailId counts every missing value as the same, so only one manual RFQ could
+ * ever be stored. Drop it so the partial index the schema now declares (unique
+ * only where emailId is an ObjectId) takes over. Same reasoning and approach
+ * as reconcileEmailIndexes above.
+ */
+async function reconcileRFQIndexes(): Promise<void> {
+  const db = mongoose.connection.db;
+  if (!db) return;
+
+  try {
+    const collections = await db.listCollections({ name: "rfqs" }).toArray();
+    if (collections.length === 0) return;
+
+    const rfqs = db.collection("rfqs");
+    const indexes = await rfqs.indexes();
+
+    const stale = indexes.filter(
+      (index) =>
+        index.name === "emailId_1" &&
+        index.unique === true &&
+        !index.partialFilterExpression
+    );
+    if (stale.length === 0) return;
+
+    for (const index of stale) {
+      await rfqs.dropIndex(index.name!);
+      console.log(`Dropped stale unique index rfqs.${index.name}`);
+    }
+
+    await RFQ.init().catch(() => undefined);
+    await RFQ.createIndexes();
+  } catch (err) {
+    console.error("Failed to reconcile RFQ indexes:", err);
   }
 }
 
