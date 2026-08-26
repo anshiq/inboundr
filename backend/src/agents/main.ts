@@ -15,7 +15,7 @@ import { generateQuoteReply } from "./generate_quote";
 const EMAIL_RAW_TEXT = `From: industrial innovators <insquar@gmail.com>
 Date: Fri, Apr 3, 2026 at 4:30 PM
 Subject: Mitutoyo vernier caliper
-To: <chennai@btsa.in>
+To: <chennai@inboundr.in>
 
 
 

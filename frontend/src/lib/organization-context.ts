@@ -1,5 +1,5 @@
-export const ACTIVE_ORGANIZATION_ID_KEY = "btsa.activeOrganizationId"
-export const ACTIVE_ORGANIZATION_CHANGED_EVENT = "btsa:active-organization-changed"
+export const ACTIVE_ORGANIZATION_ID_KEY = "inboundr.activeOrganizationId"
+export const ACTIVE_ORGANIZATION_CHANGED_EVENT = "inboundr:active-organization-changed"
 
 export function getActiveOrganizationId(): string | null {
   return window.localStorage.getItem(ACTIVE_ORGANIZATION_ID_KEY)

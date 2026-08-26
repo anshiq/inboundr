@@ -80,7 +80,7 @@ export function AuthPage({
 
         <div className="relative z-10 max-w-md space-y-4">
           <span className="inline-flex rounded-full border border-primary/20 bg-background/70 px-3 py-1 text-xs font-medium text-primary backdrop-blur">
-            BTSA Workspace
+            Inboundr Workspace
           </span>
           <h1 className="max-w-sm text-4xl font-semibold tracking-tight">
             Built for calm operations and clear decisions.

@@ -1,6 +1,6 @@
 # React + TypeScript + Vite + shadcn/ui
 
-This package is the BTSA frontend app in the root Bun workspace monorepo.
+This package is the Inboundr frontend app in the root Bun workspace monorepo.
 
 Install dependencies from the repository root:
 

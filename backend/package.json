@@ -1,5 +1,5 @@
 {
-  "name": "@btsa/backend",
+  "name": "@inboundr/backend",
   "module": "src/server.ts",
   "type": "module",
   "private": true,

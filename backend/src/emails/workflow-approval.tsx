@@ -125,7 +125,7 @@ WorkflowApprovalEmail.PreviewProps = {
   approveUrl: "https://example.com/approve",
   rejectUrl: "https://example.com/reject",
   workflowName: "RFQ Approval Flow",
-  organizationName: "BTSA",
+  organizationName: "Inboundr",
 } satisfies WorkflowApprovalEmailProps;
 
 export default WorkflowApprovalEmail;
