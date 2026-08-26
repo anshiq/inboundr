@@ -1631,7 +1631,7 @@ function AccountTab() {
 
       <SettingsCard
         title="Account Identity"
-        description="This information comes from your BTSA login."
+        description="This information comes from your Inboundr login."
       >
         <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">

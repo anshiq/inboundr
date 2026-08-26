@@ -44,7 +44,7 @@ export async function saveHomeLayout(items: HomeLayoutItem[]): Promise<HomeLayou
 function cacheKey(userId: string): string | null {
   const orgId = getActiveOrganizationId()
   if (!userId || !orgId) return null
-  return `btsa:home-layout:${userId}:${orgId}`
+  return `inboundr:home-layout:${userId}:${orgId}`
 }
 
 export function getCachedHomeLayout(userId: string): HomeLayoutItem[] | null {

@@ -171,7 +171,7 @@ export function ResetPasswordEmail({
 }
 
 ResetPasswordEmail.PreviewProps = {
-  companyName: "BTSA",
+  companyName: "Inboundr",
   resetUrl: "https://example.com/",
 } satisfies ResetPasswordEmailProps;
 

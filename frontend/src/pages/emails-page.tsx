@@ -729,7 +729,7 @@ export function EmailsPage() {
   const navigate = useNavigate()
   const { email: selectedEmailId } = useSearch({ from: "/emails" })
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
-    id: "btsa:layout:inbox",
+    id: "inboundr:layout:inbox",
     storage: localStorage,
   })
 

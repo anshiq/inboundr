@@ -78,7 +78,7 @@ export default function SupportInboxPage() {
   const isDesktop = useIsDesktop()
 
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
-    id: "btsa:layout:support",
+    id: "inboundr:layout:support",
     storage: localStorage,
   })
 

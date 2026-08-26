@@ -17,7 +17,7 @@ user-facing text, follow these rules.
   particles in labels (`Sign Up`, `Sign In`, `Set Up`, `Log Out`, `Write Off`).
 - Preserve existing ALL-CAPS acronyms and brand / proper nouns exactly:
   `RFQ, CSV, GST, HSN, QR, PDF, UPI, URL, AM, PM, OS, Excel, Gmail, Drive,
-  LinkedIn, OpenStreetMap, BTSA, Inboundr` (and the lowercase `inboundr.` brand
+  LinkedIn, OpenStreetMap, Inboundr` (and the lowercase `inboundr.` brand
   mark — never recase brand names).
 
 Examples:

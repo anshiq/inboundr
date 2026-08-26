@@ -1,5 +1,5 @@
 {
-  "name": "btsa",
+  "name": "inboundr",
   "private": true,
   "type": "module",
   "workspaces": [

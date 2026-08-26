@@ -809,7 +809,7 @@ export function DashboardPage() {
   const navigate = useNavigate()
   const { rfq: selectedRfqId } = useSearch({ from: "/rfq" })
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
-    id: "btsa:layout:rfq",
+    id: "inboundr:layout:rfq",
     storage: localStorage,
   })
 

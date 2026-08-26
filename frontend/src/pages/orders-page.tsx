@@ -203,7 +203,7 @@ function DetailPlaceholder() {
 
 export function OrdersPage() {
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
-    id: "btsa:layout:orders",
+    id: "inboundr:layout:orders",
     storage: localStorage,
   })
 

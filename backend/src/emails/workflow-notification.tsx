@@ -96,7 +96,7 @@ WorkflowNotificationEmail.PreviewProps = {
   subject: "New RFQ from Acme Corp",
   body: "An RFQ was identified from Acme Corp.\n\nCustomer: Jane Doe\nProducts: 3",
   workflowName: "RFQ Alerts",
-  organizationName: "BTSA",
+  organizationName: "Inboundr",
 } satisfies WorkflowNotificationEmailProps;
 
 export default WorkflowNotificationEmail;
