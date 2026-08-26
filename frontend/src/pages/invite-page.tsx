@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, useParams } from "@tanstack/react-router"
 
+import { AuthLayout } from "@/components/auth-layout"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { getSession } from "@/lib/auth-client"
 import { setActiveOrganizationId } from "@/lib/organization-context"
@@ -41,6 +43,15 @@ function invitationAccessLabel(invitation: InvitationPreview): string {
     return invitation.accessGroups.map((group) => group.name).join(", ")
   }
   return roleLabel(invitation.role)
+}
+
+function InvitationDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2.5">
+      <dt className="shrink-0 text-sm text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-right text-sm font-medium">{value}</dd>
+    </div>
+  )
 }
 
 export function InvitePage() {
@@ -109,114 +120,98 @@ export function InvitePage() {
     : { inviteToken: token }
 
   return (
-    <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-[#07090a] px-6 py-10 text-foreground">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,color-mix(in_oklab,var(--primary)_18%,transparent),transparent_28%),radial-gradient(circle_at_80%_70%,color-mix(in_oklab,var(--sidebar-primary)_16%,transparent),transparent_32%)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-      <div className="relative w-full max-w-xl rounded-[2rem] border border-white/10 bg-card/95 p-8 shadow-2xl shadow-black/40 backdrop-blur sm:p-10">
-        {loading ? (
-          <div className="space-y-4">
-            <div className="h-5 w-36 animate-pulse rounded-full bg-muted" />
-            <div className="h-10 w-3/4 animate-pulse rounded-xl bg-muted" />
-            <div className="h-24 animate-pulse rounded-2xl bg-muted/70" />
+    <AuthLayout>
+      {loading ? (
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col items-center gap-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-8 w-56" />
+            <Skeleton className="h-4 w-64" />
           </div>
-        ) : error && !invitation ? (
-          <div className="space-y-5">
-            <span className="inline-flex rounded-full border border-destructive/20 bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive">
-              Invite Unavailable
-            </span>
-            <div className="space-y-2">
-              <h1 className="text-3xl font-semibold tracking-tight">This Invitation Can’t Be Opened</h1>
-              <p className="text-sm leading-6 text-muted-foreground">{error}</p>
-            </div>
-            <Button asChild variant="outline">
-              <Link to="/login">Go to Login</Link>
-            </Button>
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      ) : error && !invitation ? (
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col items-center gap-1 text-center">
+            <h1 className="text-2xl font-bold">Invitation Unavailable</h1>
+            <p className="text-sm text-balance text-muted-foreground">{error}</p>
           </div>
-        ) : invitation ? (
-          <div className="space-y-7">
-            <div className="space-y-5">
-              <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                  Workspace Invitation
-                </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-muted-foreground">
-                  {invitationAccessLabel(invitation)}
-                </span>
-              </div>
-              <div className="space-y-3">
-                <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-                  Join {invitation.organization.name}
-                </h1>
-                <p className="max-w-md text-sm leading-6 text-muted-foreground">
-                  {inviterLabel(invitation)} invited you to collaborate in this workspace.
-                  Create your account with the invited email to continue.
-                </p>
-              </div>
-            </div>
+          <Button asChild variant="outline">
+            <Link to="/login">Go to Login</Link>
+          </Button>
+        </div>
+      ) : invitation ? (
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col items-center gap-1 text-center">
+            <p className="text-sm font-medium text-muted-foreground">
+              You&apos;ve been invited to join
+            </p>
+            <h1 className="text-2xl font-bold text-balance">
+              {invitation.organization.name}
+            </h1>
+            <p className="text-sm text-balance text-muted-foreground">
+              {inviterLabel(invitation)} invited you to collaborate on Inboundr.
+            </p>
+          </div>
 
-            <div className="grid gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-4 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                  Invited email
-                </p>
-                <p className="mt-1 font-semibold">{invitation.email}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-background/60 px-4 py-3 sm:text-right">
-                <p className="text-xs text-muted-foreground">Expires</p>
-                <p className="font-medium">{formatDate(invitation.expiresAt)}</p>
-              </div>
-            </div>
+          <dl className="divide-y rounded-lg border px-4 py-1">
+            <InvitationDetailRow label="Invited email" value={invitation.email} />
+            <InvitationDetailRow label="Access" value={invitationAccessLabel(invitation)} />
+            <InvitationDetailRow label="Expires" value={formatDate(invitation.expiresAt)} />
+          </dl>
 
-            {invitation.status !== "pending" ? (
-              <p className="rounded-2xl border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning">
-                This invitation is {invitation.status}.
-              </p>
-            ) : signedInWithWrongEmail ? (
-              <p className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                You are signed in as {sessionEmail}. Sign in with {invitation.email} to accept this invitation.
-              </p>
-            ) : error ? (
-              <p className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                {error}
-              </p>
-            ) : message ? (
-              <p className="rounded-2xl border border-success/25 bg-success/10 px-4 py-3 text-sm text-success">
-                {message}
-              </p>
-            ) : null}
+          {invitation.status !== "pending" ? (
+            <p className="rounded-lg border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning">
+              This invitation is {invitation.status}. Ask {inviterLabel(invitation)} to
+              send a new one.
+            </p>
+          ) : signedInWithWrongEmail ? (
+            <p className="rounded-lg border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              You are signed in as {sessionEmail}. Sign in with {invitation.email} to
+              accept this invitation.
+            </p>
+          ) : error ? (
+            <p className="rounded-lg border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {error}
+            </p>
+          ) : message ? (
+            <p className="rounded-lg border border-success/25 bg-success/10 px-4 py-3 text-sm text-success">
+              {message}
+            </p>
+          ) : null}
 
-            {invitation.status === "pending" && (
-              <div className="grid gap-3">
-                {sessionEmail && !signedInWithWrongEmail ? (
-                  <Button size="lg" onClick={acceptInvitation} disabled={accepting}>
-                    {accepting && <Spinner data-icon="inline-start" />}
-                    Accept Invitation
+          {invitation.status === "pending" && (
+            <div className="flex flex-col gap-3">
+              {sessionEmail && !signedInWithWrongEmail ? (
+                <Button onClick={acceptInvitation} disabled={accepting}>
+                  {accepting && <Spinner data-icon="inline-start" />}
+                  Accept Invitation
+                </Button>
+              ) : (
+                <>
+                  <Button asChild>
+                    <Link to="/register" search={authSearch}>
+                      Create Account
+                    </Link>
                   </Button>
-                ) : (
-                  <>
-                    <Button asChild size="lg">
-                      <Link to="/register" search={authSearch}>
-                        Create Account
-                      </Link>
-                    </Button>
-                    <p className="text-center text-sm text-muted-foreground">
-                      Already have an account?{" "}
-                      <Link
-                        to="/login"
-                        search={authSearch}
-                        className="font-medium text-primary underline-offset-4 hover:underline"
-                      >
-                        Sign In
-                      </Link>
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        ) : null}
-      </div>
-    </div>
+                  <p className="text-center text-sm text-muted-foreground">
+                    Already have an account?{" "}
+                    <Link
+                      to="/login"
+                      search={authSearch}
+                      className="underline underline-offset-4"
+                    >
+                      Sign In
+                    </Link>
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </AuthLayout>
   )
 }
 
