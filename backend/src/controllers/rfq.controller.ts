@@ -15,9 +15,11 @@ import {
   isSpecialDiscountEnabled,
 } from "../services/customer-field.service";
 import {
+  buildManualRFQProcessingInput,
   buildRFQProcessingInput,
   hasRFQProcessableContent,
 } from "../services/rfq-input.service";
+import { classifyEmail } from "../agents/check_rfq";
 import { streamRFQPdf } from "../services/rfq-pdf.service";
 import { resolveOrganizationPdfBranding } from "../services/organization-pdf-branding.service";
 import { renderRFQQuotePdfBuffer, rfqQuotePdfFilename } from "../services/rfq-quote-pdf.service";
@@ -887,17 +889,46 @@ export const createManualRFQ = async (
       return;
     }
 
+    const manualInput = { text: text || null, attachments };
+
+    // Extract once up front so the submission can be classified before an RFQ
+    // is created; the same input is then reused for background processing.
+    const processingInput = await buildManualRFQProcessingInput(manualInput);
+    if (!processingInput.trim()) {
+      res.status(400).json({
+        error: "No readable text could be extracted from the submission",
+      });
+      return;
+    }
+
+    // Reject random pastes that clearly are not a request for quotation. If
+    // the classifier itself is unavailable, let the submission through rather
+    // than blocking a legitimate RFQ.
+    let reason = "Added manually";
+    try {
+      const classification = await classifyEmail(processingInput);
+      if (!classification.isRFQemail) {
+        res.status(400).json({
+          error: `This doesn't look like an RFQ. ${classification.reason}`,
+        });
+        return;
+      }
+      reason = classification.reason;
+    } catch (classifyErr) {
+      console.warn("Manual RFQ classification failed, accepting submission:", classifyErr);
+    }
+
     const rfq = await RFQ.create({
       userId: authReq.user.id,
       organizationId: organization._id,
       source: "manual",
       isRFQ: true,
-      reason: "Added manually",
+      reason,
       isProcessed: false,
-      manualInput: { text: text || null, attachments },
+      manualInput,
     });
 
-    processManualRFQ(rfq._id.toString()).catch((err) =>
+    processManualRFQ(rfq._id.toString(), processingInput).catch((err) =>
       console.error(`Manual RFQ processing failed for ${rfq._id}:`, err)
     );
 
