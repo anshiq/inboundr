@@ -1171,6 +1171,14 @@ export default function SupportPage({ organizationId }: { organizationId: string
                                   <span className="text-xs opacity-70">Audio unavailable</span>
                                 )}
                               </div>
+                            ) : attachment.contentType.startsWith("video/") && attachment.url ? (
+                              <video
+                                key={attachment.key}
+                                src={attachment.url}
+                                controls
+                                preload="metadata"
+                                className="max-h-64 w-full rounded-lg border border-stone-200 bg-black dark:border-stone-700"
+                              />
                             ) : (
                               <a
                                 key={attachment.key}
@@ -1379,6 +1387,7 @@ export default function SupportPage({ organizationId }: { organizationId: string
                         type="file"
                         className="sr-only"
                         multiple
+                        accept="application/pdf,image/jpeg,image/png,image/webp,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,video/mp4,video/webm,video/quicktime"
                         onChange={(event) => {
                           addFiles(event.target.files)
                           event.target.value = ""

@@ -15,6 +15,7 @@ import {
   initialsFromName,
   isAudioAttachment,
   isImageAttachment,
+  isVideoAttachment,
 } from "./support-utils"
 import type { SupportAiDraft, Ticket, TicketAttachment, TicketMessage } from "./types"
 
@@ -77,6 +78,16 @@ function AttachmentChip({ attachment, tone }: { attachment: TicketAttachment; to
           loading="lazy"
         />
       </a>
+    )
+  }
+  if (isVideoAttachment(attachment) && attachment.url) {
+    return (
+      <video
+        src={attachment.url}
+        controls
+        preload="metadata"
+        className="max-h-64 w-full rounded-xl border bg-black"
+      />
     )
   }
   return (

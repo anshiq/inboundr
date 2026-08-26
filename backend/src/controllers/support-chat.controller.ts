@@ -21,6 +21,10 @@ import { sendSupportOpenedEmail, sendSupportTranscriptEmail } from "../services/
 import { createPresignedUpload } from "../services/storage.service";
 import { serializeTicket, serializeTicketForVisitor } from "../services/ticket.service";
 import { createNotificationForRecipient } from "../services/notification.service";
+import {
+  SUPPORT_VIDEO_MAX_FILE_SIZE,
+  SUPPORT_VIDEO_MIME_TYPES,
+} from "../config/upload-constraints.config";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SUPPORT_ALLOWED_MIME_TYPES = [
@@ -36,6 +40,7 @@ const SUPPORT_ALLOWED_MIME_TYPES = [
   "audio/mp4",
   "audio/mpeg",
   "audio/wav",
+  ...SUPPORT_VIDEO_MIME_TYPES,
 ];
 const SUPPORT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -385,8 +390,11 @@ export async function createSupportUploadPresign(
       res.status(400).json({ error: "File size is required" });
       return;
     }
-    if (size > SUPPORT_MAX_FILE_SIZE) {
-      res.status(400).json({ error: "File must be 10MB or smaller" });
+    const maxFileSize = (SUPPORT_VIDEO_MIME_TYPES as readonly string[]).includes(contentType)
+      ? SUPPORT_VIDEO_MAX_FILE_SIZE
+      : SUPPORT_MAX_FILE_SIZE;
+    if (size > maxFileSize) {
+      res.status(400).json({ error: `File must be ${Math.round(maxFileSize / 1024 / 1024)}MB or smaller` });
       return;
     }
     if (!SUPPORT_ALLOWED_MIME_TYPES.includes(contentType)) {
