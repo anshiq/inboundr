@@ -45,7 +45,9 @@ const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 const AVATAR_ALLOWED_MIME_TYPES = ["image/webp", "image/jpeg", "image/png"];
 const AVATAR_MAX_FILE_SIZE = 2 * 1024 * 1024;
 const IMAGE_UPLOAD_SCOPES = ["branding", "letterhead", "employee", "attendance"] as const;
-const AUTHENTICATED_UPLOAD_SCOPES = ["form", "customer", "quote", "product", "support", "branding", "letterhead", "employee", "attendance", "asset", "email", "crm", "projects"] as const;
+const AUTHENTICATED_UPLOAD_SCOPES = ["form", "customer", "quote", "product", "support", "branding", "letterhead", "employee", "attendance", "asset", "email", "crm", "projects", "rfq"] as const;
+// Matches the RFQ attachment extractor's per-file cap.
+const RFQ_UPLOAD_MAX_FILE_SIZE = 8 * 1024 * 1024;
 
 function normalizeUploadRequest(body: Record<string, unknown>) {
   return {
@@ -81,6 +83,7 @@ function allowedMimeTypesForScope(scope: string): string[] {
 function maxFileSizeForScope(scope: string): number {
   if (IMAGE_UPLOAD_SCOPES.includes(scope as any)) return BRANDING_MAX_FILE_SIZE;
   if (scope === "email" || scope === "crm" || scope === "projects") return EMAIL_ATTACHMENT_MAX_FILE_SIZE;
+  if (scope === "rfq") return RFQ_UPLOAD_MAX_FILE_SIZE;
   return DEFAULT_MAX_FILE_SIZE;
 }
 

@@ -67,7 +67,7 @@ interface RFQSavedQuoteProduct {
 
 interface DraftRFQ {
   _id: string
-  emailId: RFQEmail
+  emailId: RFQEmail | null
   customer: RFQCustomer | null
   savedQuoteProducts: RFQSavedQuoteProduct[]
   paymentTermName?: string | null
@@ -340,8 +340,8 @@ export function OrdersPage() {
             ) : (
               <div className="animate-in fade-in-0 space-y-0.5 p-1 duration-300">
                 {drafts.map((draft) => {
-                  const sender = parseSender(draft.emailId.from)
-                  const senderName = draft.customer?.company || draft.customer?.name || sender.name
+                  const sender = draft.emailId ? parseSender(draft.emailId.from) : null
+                  const senderName = draft.customer?.company || draft.customer?.name || sender?.name || "Manual Entry"
                   const avatarColors = getAvatarColor(senderName)
                   const isSelected = selectedId === draft._id
                   const savedAt = draft.draftSavedAt || draft.createdAt
@@ -367,7 +367,7 @@ export function OrdersPage() {
                       </div>
                       <div className="pl-[42px]">
                         <p className="truncate text-sm font-medium leading-snug">
-                          {draft.emailId.subject || "(no subject)"}
+                          {draft.emailId ? draft.emailId.subject || "(no subject)" : "Manually Added RFQ"}
                         </p>
                         <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
                           <span className="inline-flex items-center gap-1">
@@ -406,9 +406,11 @@ export function OrdersPage() {
                       </span>
                     </div>
                     <h1 className="text-lg font-semibold leading-snug">
-                      {selectedDraft.emailId.subject || "(no subject)"}
+                      {selectedDraft.emailId
+                        ? selectedDraft.emailId.subject || "(no subject)"
+                        : "Manually Added RFQ"}
                     </h1>
-                    {selectedDraft.emailId.snippet && (
+                    {selectedDraft.emailId?.snippet && (
                       <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
                         {selectedDraft.emailId.snippet}
                       </p>
@@ -423,7 +425,9 @@ export function OrdersPage() {
                       Customer
                     </div>
                     <p className="mt-1 text-sm font-medium">
-                      {selectedDraft.customer?.company || selectedDraft.customer?.name || parseSender(selectedDraft.emailId.from).name}
+                      {selectedDraft.customer?.company ||
+                        selectedDraft.customer?.name ||
+                        (selectedDraft.emailId ? parseSender(selectedDraft.emailId.from).name : "Manual Entry")}
                     </p>
                   </div>
                   <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
@@ -432,7 +436,8 @@ export function OrdersPage() {
                       Email
                     </div>
                     <p className="mt-1 truncate text-sm font-medium">
-                      {selectedDraft.customer?.email || parseSender(selectedDraft.emailId.from).email}
+                      {selectedDraft.customer?.email ||
+                        (selectedDraft.emailId ? parseSender(selectedDraft.emailId.from).email : "—")}
                     </p>
                   </div>
                 </div>

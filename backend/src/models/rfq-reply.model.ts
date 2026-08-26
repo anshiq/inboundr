@@ -22,7 +22,7 @@ export interface IRFQReplyProduct {
 export interface IRFQReply extends Document {
   userId: string;
   organizationId: Types.ObjectId;
-  gmailAccountId: Types.ObjectId;
+  gmailAccountId: Types.ObjectId | null;
   rfqId: Types.ObjectId;
   selectedProducts: IRFQReplyProduct[];
   specialDiscountPercentage: number;
@@ -81,10 +81,12 @@ const rfqReplySchema = new Schema<IRFQReply>(
       required: false,
       index: true,
     },
+    // Null for manually created RFQs, which have no linked Gmail account.
     gmailAccountId: {
       type: Schema.Types.ObjectId,
       ref: "GmailAccount",
-      required: true,
+      required: false,
+      default: null,
       index: true,
     },
     rfqId: {
@@ -103,7 +105,9 @@ const rfqReplySchema = new Schema<IRFQReply>(
     deliveryTerms: { type: String, default: "", trim: true },
     subject: { type: String, required: true },
     body: { type: String, required: true },
-    to: { type: String, required: true },
+    // Empty when a manual RFQ yields no customer email; such quotes are shared
+    // as a PDF instead of sent.
+    to: { type: String, default: "" },
     generatedAt: { type: Date, required: true },
     sendStatus: {
       type: String,
