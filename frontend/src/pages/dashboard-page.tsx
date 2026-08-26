@@ -814,7 +814,7 @@ function MatchStatusBadge({ status }: { status: "matched" | "ambiguous" | "no_ma
   return <StatusBadge tone={config.tone}>{config.label}</StatusBadge>
 }
 
-function EmptyState() {
+function EmptyState({ onAddRfq }: { onAddRfq: () => void }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 p-12 text-center">
       <div className="rounded-2xl border border-dashed border-muted-foreground/25 bg-muted/30 p-6">
@@ -826,6 +826,10 @@ function EmptyState() {
           Incoming RFQ emails will be processed and displayed here.
         </p>
       </div>
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={onAddRfq}>
+        <PlusIcon className="size-3.5" />
+        Add RFQ Manually
+      </Button>
     </div>
   )
 }
@@ -2656,14 +2660,19 @@ export function DashboardPage() {
                 )}
               </div>
               <div className="flex items-center gap-1">
-                <Button
-                  size="sm"
-                  className="h-8 gap-1.5 px-2 text-xs"
-                  onClick={() => setAddRfqOpen(true)}
-                >
-                  <PlusIcon className="size-4" />
-                  Add RFQ
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => setAddRfqOpen(true)}
+                    >
+                      <PlusIcon className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Add RFQ manually</TooltipContent>
+                </Tooltip>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -2792,7 +2801,7 @@ export function DashboardPage() {
               ) : listError ? (
                 <ErrorState message={listError} onRetry={() => fetchList(page)} />
               ) : rfqs.length === 0 ? (
-                <EmptyState />
+                <EmptyState onAddRfq={() => setAddRfqOpen(true)} />
               ) : (
                 <div className="animate-in fade-in-0 duration-300 space-y-0.5 p-1">
                   {rfqs.map((rfq) => {
