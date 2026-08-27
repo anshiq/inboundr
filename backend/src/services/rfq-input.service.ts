@@ -1,6 +1,8 @@
 import type { IGmailAccount } from "../models/gmail-account.model";
 import type { IEmail } from "../models/email.model";
+import type { IRFQManualInput } from "../models/rfq.model";
 import { getGmailClientForAccount } from "../config/gmail.config";
+import { getObjectBuffer } from "./storage.service";
 import {
   extractRFQAttachmentText,
   getSupportedRFQAttachments,
@@ -115,6 +117,52 @@ export async function buildRFQProcessingInput(
 
   if (attachmentSections.length > 0) {
     sections.push(`SUPPORTED ATTACHMENTS:\n${attachmentSections.join("\n\n")}`);
+  }
+
+  return sections.join("\n\n");
+}
+
+/**
+ * Extraction input for a manually created RFQ: the pasted text plus text
+ * extracted from files the user uploaded to S3 (same parsers as email
+ * attachments — the extractor only reads filename and mimeType, so the S3 key
+ * stands in for the Gmail attachment id).
+ */
+export async function buildManualRFQProcessingInput(
+  input: IRFQManualInput
+): Promise<string> {
+  const sections: string[] = [];
+
+  if (input.text?.trim()) {
+    sections.push(`RFQ REQUEST (submitted manually by our team):\n${input.text.trim()}`);
+  }
+
+  const attachmentSections: string[] = [];
+  for (const file of input.attachments) {
+    const data = await getObjectBuffer(file.key);
+    const extraction = await extractRFQAttachmentText({
+      attachment: {
+        filename: file.filename,
+        mimeType: file.mimeType,
+        size: file.size,
+        attachmentId: file.key,
+      },
+      data,
+    });
+
+    if (extraction.text) {
+      attachmentSections.push(
+        `FILE: ${extraction.filename} (${extraction.mimeType})\n${extraction.text}`
+      );
+    } else if (extraction.warning) {
+      attachmentSections.push(
+        `FILE: ${extraction.filename} (${extraction.mimeType})\nExtraction warning: ${extraction.warning}`
+      );
+    }
+  }
+
+  if (attachmentSections.length > 0) {
+    sections.push(`UPLOADED FILES:\n${attachmentSections.join("\n\n")}`);
   }
 
   return sections.join("\n\n");

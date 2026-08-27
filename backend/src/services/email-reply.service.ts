@@ -128,7 +128,7 @@ export function buildQuotedOriginal(email: IEmail): { html: string; text: string
     : `<pre style="white-space:pre-wrap;font-family:inherit;margin:0">${escapeHtml(email.bodyText ?? "")}</pre>`;
 
   const html = [
-    `<div class="btsa_quote">`,
+    `<div class="inboundr_quote">`,
     `<p style="color:#5f6368;font-size:12px;margin:16px 0 8px">${escapeHtml(attribution)}</p>`,
     `<blockquote style="margin:0 0 0 8px;padding-left:12px;border-left:2px solid #dadce0;color:#5f6368">`,
     originalHtml,
@@ -223,7 +223,7 @@ export function buildForwardedBody(email: IEmail): { html: string; text: string 
   const originalText = email.bodyText ?? (email.bodyHtml ? htmlToPlainText(email.bodyHtml) : "");
 
   return {
-    html: `${intro.html}\n<div class="btsa_forwarded_body">${originalHtml}</div>`,
+    html: `${intro.html}\n<div class="inboundr_forwarded_body">${originalHtml}</div>`,
     text: `${intro.text}\n${originalText}`,
   };
 }
@@ -238,7 +238,7 @@ export function buildForwardIntro(email: IEmail): { html: string; text: string }
   if (email.cc) rows.push(["Cc", email.cc]);
 
   const html = [
-    `<div class="btsa_forward">`,
+    `<div class="inboundr_forward">`,
     `<p style="color:#5f6368;font-size:12px;margin:16px 0 8px">---------- Forwarded message ----------</p>`,
     ...rows.map(
       ([label, value]) =>

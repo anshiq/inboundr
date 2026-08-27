@@ -233,7 +233,9 @@ export const listEmails = async (
     })
       .select("emailId threadId gmailAccountId isRFQ reason errorMessage")
       .lean();
-    const rfqByEmailId = new Map(rfqs.map((rfq) => [rfq.emailId.toString(), rfq]));
+    const rfqByEmailId = new Map(
+      rfqs.flatMap((rfq) => (rfq.emailId ? [[rfq.emailId.toString(), rfq] as const] : []))
+    );
     // Thread fallback prefers a positive classification, so a stray "not RFQ"
     // row for a follow-up never masks the thread's real RFQ.
     const rfqByThreadKey = new Map<string, (typeof rfqs)[number]>();

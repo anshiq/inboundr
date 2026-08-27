@@ -6,7 +6,7 @@ import { API_ORIGIN } from "@/lib/env"
 import { organizationMeQueryOptions } from "@/lib/queries"
 
 const DEFAULT_PRIMARY_COLOR = "#f5b400"
-const BRANDING_CHANGED_EVENT = "btsa:organization-branding-changed"
+const BRANDING_CHANGED_EVENT = "inboundr:organization-branding-changed"
 export const BRANDING_CACHE_KEY = "organization-branding"
 
 type OrganizationTheme = "dark" | "light"

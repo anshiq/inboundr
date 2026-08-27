@@ -109,7 +109,7 @@ export const auth = betterAuth({
     sendResetPassword: async ({ user, url }) => {
       await sendEmail({
         to: user.email,
-        subject: "Reset your BTSA password",
+        subject: "Reset your Inboundr password",
         react: createElement(ResetPasswordEmail, {
           name: user.name,
           resetUrl: url,
@@ -122,7 +122,7 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url }) => {
       await sendEmail({
         to: user.email,
-        subject: "Verify your BTSA email address",
+        subject: "Verify your Inboundr email address",
         react: createElement(VerifyEmail, {
           name: user.name,
           verificationUrl: url,

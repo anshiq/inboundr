@@ -88,7 +88,7 @@ export function splitAddressList(raw: string): string[] {
 }
 
 function makeBoundary(label: string): string {
-  return `btsa_${label}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return `inboundr_${label}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
 function renderHeaders(headers: MimeHeaders): string[] {

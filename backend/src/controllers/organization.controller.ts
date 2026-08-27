@@ -835,7 +835,7 @@ export async function inviteOrganizationMember(
     const inviteUrl = `${frontendOrigin}/invite/${encodeURIComponent(rawToken)}`;
     await sendEmail({
       to: email,
-      subject: `Join ${organization.name} on BTSA`,
+      subject: `Join ${organization.name} on Inboundr`,
       react: createElement(OrganizationInvitationEmail, {
         organizationName: organization.name,
         inviterName: authReq.user.name,

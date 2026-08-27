@@ -1,6 +1,6 @@
 # quotation-automation
 
-This package is part of the BTSA Bun workspace monorepo.
+This package is part of the Inboundr Bun workspace monorepo.
 
 To install dependencies, run this from the repository root:
 

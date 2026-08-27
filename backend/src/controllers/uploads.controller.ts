@@ -21,6 +21,8 @@ import {
   BRANDING_MAX_FILE_SIZE,
   EMAIL_ATTACHMENT_ALLOWED_MIME_TYPES,
   EMAIL_ATTACHMENT_MAX_FILE_SIZE,
+  SUPPORT_VIDEO_MAX_FILE_SIZE,
+  SUPPORT_VIDEO_MIME_TYPES,
   isBlockedAttachmentFilename,
 } from "../config/upload-constraints.config";
 
@@ -40,12 +42,18 @@ const SUPPORT_AUDIO_MIME_TYPES = [
   "audio/mpeg",
   "audio/wav",
 ];
-const SUPPORT_ALLOWED_MIME_TYPES = [...DEFAULT_ALLOWED_MIME_TYPES, ...SUPPORT_AUDIO_MIME_TYPES];
+const SUPPORT_ALLOWED_MIME_TYPES = [
+  ...DEFAULT_ALLOWED_MIME_TYPES,
+  ...SUPPORT_AUDIO_MIME_TYPES,
+  ...SUPPORT_VIDEO_MIME_TYPES,
+];
 const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 const AVATAR_ALLOWED_MIME_TYPES = ["image/webp", "image/jpeg", "image/png"];
 const AVATAR_MAX_FILE_SIZE = 2 * 1024 * 1024;
 const IMAGE_UPLOAD_SCOPES = ["branding", "letterhead", "employee", "attendance"] as const;
-const AUTHENTICATED_UPLOAD_SCOPES = ["form", "customer", "quote", "product", "support", "branding", "letterhead", "employee", "attendance", "asset", "email", "crm", "projects"] as const;
+const AUTHENTICATED_UPLOAD_SCOPES = ["form", "customer", "quote", "product", "support", "branding", "letterhead", "employee", "attendance", "asset", "email", "crm", "projects", "rfq"] as const;
+// Matches the RFQ attachment extractor's per-file cap.
+const RFQ_UPLOAD_MAX_FILE_SIZE = 8 * 1024 * 1024;
 
 function normalizeUploadRequest(body: Record<string, unknown>) {
   return {
@@ -78,9 +86,13 @@ function allowedMimeTypesForScope(scope: string): string[] {
   return IMAGE_UPLOAD_SCOPES.includes(scope as any) ? [...BRANDING_ALLOWED_MIME_TYPES] : DEFAULT_ALLOWED_MIME_TYPES;
 }
 
-function maxFileSizeForScope(scope: string): number {
+function maxFileSizeForScope(scope: string, contentType: string): number {
   if (IMAGE_UPLOAD_SCOPES.includes(scope as any)) return BRANDING_MAX_FILE_SIZE;
   if (scope === "email" || scope === "crm" || scope === "projects") return EMAIL_ATTACHMENT_MAX_FILE_SIZE;
+  if (scope === "rfq") return RFQ_UPLOAD_MAX_FILE_SIZE;
+  if (scope === "support" && (SUPPORT_VIDEO_MIME_TYPES as readonly string[]).includes(contentType)) {
+    return SUPPORT_VIDEO_MAX_FILE_SIZE;
+  }
   return DEFAULT_MAX_FILE_SIZE;
 }
 
@@ -200,7 +212,7 @@ export async function createAuthenticatedPresign(req: Request, res: Response): P
     const validationError = validateUploadBasics(
       input,
       allowedMimeTypesForScope(input.scope),
-      maxFileSizeForScope(input.scope)
+      maxFileSizeForScope(input.scope, input.contentType)
     );
     if (validationError) {
       res.status(400).json({ error: validationError });
