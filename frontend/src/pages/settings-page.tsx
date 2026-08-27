@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useSearch } from "@tanstack/react-router"
+import { useNavigate, useSearch } from "@tanstack/react-router"
 
 import { AppLayout } from "@/components/app-layout"
 import { CustomerFieldSettings } from "@/components/customer-field-settings"
@@ -36,7 +36,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ThemePicker } from "@/components/theme-picker"
 import { useTheme } from "@/components/theme-provider"
 import { useSession, updateUser } from "@/lib/auth-client"
@@ -4004,6 +4003,7 @@ function SupportTab() {
 
 export function SettingsPage() {
   const { tab } = useSearch({ from: "/settings" })
+  const navigate = useNavigate({ from: "/settings" })
   const {
     canManageOrganization,
     hasFeature,
@@ -4021,6 +4021,7 @@ export function SettingsPage() {
         value: "organization",
         label: "Organization",
         icon: Building2Icon,
+        group: "Organization",
         isVisible: canShowManagementTabs,
         content: <OrganizationTab />,
       },
@@ -4028,6 +4029,7 @@ export function SettingsPage() {
         value: "customers",
         label: "Customers",
         icon: ContactRoundIcon,
+        group: "Organization",
         isVisible: canShowCustomerTab,
         content: <CustomerFieldSettings />,
       },
@@ -4035,6 +4037,7 @@ export function SettingsPage() {
         value: "account",
         label: "Account",
         icon: KeyIcon,
+        group: "Account",
         isVisible: true,
         content: <AccountTab />,
       },
@@ -4042,6 +4045,7 @@ export function SettingsPage() {
         value: "members",
         label: "Members",
         icon: UsersIcon,
+        group: "Organization",
         isVisible: canShowManagementTabs,
         content: <MembersTab />,
       },
@@ -4049,6 +4053,7 @@ export function SettingsPage() {
         value: "access-groups",
         label: "Access Groups",
         icon: ShieldCheckIcon,
+        group: "Organization",
         isVisible: canShowManagementTabs,
         content: <AccessGroupsTab />,
       },
@@ -4056,6 +4061,7 @@ export function SettingsPage() {
         value: "support",
         label: "Support",
         icon: MessageSquareTextIcon,
+        group: "Organization",
         isVisible: canShowSupportTab,
         content: <SupportTab />,
       },
@@ -4063,6 +4069,7 @@ export function SettingsPage() {
         value: "notifications",
         label: "Notifications",
         icon: MailIcon,
+        group: "Organization",
         isVisible: canShowManagementTabs,
         content: <NotificationsTab />,
       },
@@ -4073,36 +4080,61 @@ export function SettingsPage() {
   const activeTab = visibleTabs.some((settingsTab) => settingsTab.value === tab)
     ? tab
     : visibleTabs[0]?.value
+  const activeContent = visibleTabs.find(
+    (settingsTab) => settingsTab.value === activeTab,
+  )?.content
+  const navGroups = ["Account", "Organization"]
+    .map((group) => ({
+      label: group,
+      items: visibleTabs.filter((settingsTab) => settingsTab.group === group),
+    }))
+    .filter((group) => group.items.length > 0)
 
   return (
     <AppLayout>
       <SiteHeader />
       <div className="flex-1 overflow-y-auto">
-        <div className="w-full max-w-5xl px-6 py-8 lg:px-10">
-          <div className="mb-7 max-w-2xl">
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight">Settings</h1>
+        <div className="w-full max-w-6xl px-6 py-8 lg:px-10">
+          <h1 className="mb-7 text-2xl font-semibold tracking-tight lg:hidden">Settings</h1>
+
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-12">
+            <div className="lg:sticky lg:top-0 lg:w-52 lg:shrink-0">
+              <h1 className="mb-7 hidden text-2xl font-semibold tracking-tight lg:block">
+                Settings
+              </h1>
+              <nav className="-mx-6 px-6 lg:mx-0 lg:px-0">
+                <div className="flex gap-5 overflow-x-auto pb-1 lg:flex-col lg:gap-6 lg:overflow-visible lg:pb-0">
+                  {navGroups.map((group) => (
+                    <div key={group.label} className="shrink-0 lg:shrink">
+                      <p className="mb-2 hidden px-3 text-xs font-medium tracking-wide text-muted-foreground lg:block">
+                        {group.label}
+                      </p>
+                      <div className="flex gap-1 lg:flex-col">
+                        {group.items.map(({ value, label, icon: Icon }) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => navigate({ search: { tab: value } })}
+                            aria-current={value === activeTab ? "page" : undefined}
+                            className={`flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm whitespace-nowrap transition-colors lg:w-full ${
+                              value === activeTab
+                                ? "bg-muted font-medium text-foreground"
+                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                            }`}
+                          >
+                            <Icon className="size-4 shrink-0" />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </nav>
+            </div>
+
+            <div className="min-w-0 max-w-3xl flex-1">{activeContent}</div>
           </div>
-
-          <Tabs defaultValue={activeTab} key={activeTab}>
-            <div className="mb-6 overflow-x-auto">
-              <TabsList className="h-auto rounded-2xl bg-muted/60 p-1.5">
-                {visibleTabs.map(({ value, label, icon: Icon }) => (
-                  <TabsTrigger key={value} value={value} className="gap-1.5">
-                    <Icon className="size-3.5" />
-                    {label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-
-            <div className="max-w-3xl">
-              {visibleTabs.map(({ value, content }) => (
-                <TabsContent key={value} value={value} className="mt-0">
-                  {content}
-                </TabsContent>
-              ))}
-            </div>
-          </Tabs>
         </div>
       </div>
     </AppLayout>
